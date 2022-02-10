@@ -164,8 +164,6 @@ class Modi:
                 res = self.install_pip(pkg)
                 if(res == 1):
                     setup_py_queue.append(pkg)
-                else:
-                    continue
             else:
                 res = self.install_setuptools(pkg)
                 if(res == 1):
@@ -196,7 +194,7 @@ class Modi:
     def install_pip(self, pkg):
         current_env = os.environ.copy()
         current_env["PYTHONPATH"] = self.prefix + "/lib/site-packages/"
-        inst_result = subprocess.run(f"{sys.executable} -m pip install --quiet --no-warn-script-location {pkg} --prefix {self.prefix}", env=current_env, shell=True)
+        inst_result = subprocess.run(f"{sys.executable} -m pip install --quiet --ignore-installed --no-warn-script-location {pkg} --prefix {self.prefix}", env=current_env, shell=True)
         if(inst_result.returncode != 0):
             self.console.log(f"Installing package {pkg} failed, adding to setuptools queue", mtype="warning")
             return 1
