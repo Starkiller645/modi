@@ -113,7 +113,6 @@ class Modi:
             return 1
 
     def install(self, *args):
-        print(args)
         args = args[0]
         local = False
         cwd = ""
@@ -140,36 +139,38 @@ class Modi:
                 if(pkg[0] == "@"):
                     mode = "SETUPTOOLS"
                     pkg = pkg[1:]
-                self.console.log(f"Installing package {pkg}", mtype="message")
+
                 if(mode == "PIP"):
+                    self.console.log(f"Installing package {pkg} with PIP", mtype="message")
                     res = self.install_pip(pkg)
                     if(res == 1):
                         setup_py_queue.append(pkg)
                     else:
                         continue
                 else:
+                    self.console.log(f"Installing package {pkg} with setuptools", mtype="message")
                     res = self.install_setuptools(pkg)
                     if(res == 1):
                         self.console.log("Error: failed to install package " + pkg, mtype="error")
                     else:
                         self.console.log(f"Installed package {pkg}", mtype="message")
-
-        for pkg in packages:
-            mode = "PIP"
-            if(pkg[0] == "@"):
-                mode = "SETUPTOOLS"
-                pkg = pkg[1:]
-            self.console.log(f"Installing package {pkg}", mtype="message")
-            if(mode == "PIP"):
-                res = self.install_pip(pkg)
-                if(res == 1):
-                    setup_py_queue.append(pkg)
-            else:
-                res = self.install_setuptools(pkg)
-                if(res == 1):
-                    self.console.log("Error: failed to install package " + pkg, mtype="error")
+        else:
+            for pkg in packages:
+                mode = "PIP"
+                if(pkg[0] == "@"):
+                    mode = "SETUPTOOLS"
+                    pkg = pkg[1:]
+                self.console.log(f"Installing package {pkg}", mtype="message")
+                if(mode == "PIP"):
+                    res = self.install_pip(pkg)
+                    if(res == 1):
+                        setup_py_queue.append(pkg)
                 else:
-                    self.console.log(f"Installed package {pkg}", mtype="message")
+                    res = self.install_setuptools(pkg)
+                    if(res == 1):
+                        self.console.log("Error: failed to install package " + pkg, mtype="error")
+                    else:
+                        self.console.log(f"Installed package {pkg}", mtype="message")
         if(local):
             self.console.log("Local mode selected, copying files to CWD", mtype="message")
             for file in os.listdir("./lib/python3.10/site-packages"):
