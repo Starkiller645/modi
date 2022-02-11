@@ -10,6 +10,7 @@ import re
 import shutil
 import time
 from pathlib import Path
+from io import StringIO
 import glob
 termtype = "plain"
 try:
@@ -317,6 +318,7 @@ class Modi:
                         setup_py_queue.append(pkg)
 
                 else:
+                    self.console.log("Using legacy setuptools mode, dependencies will have to be installed manually", mtype="warning")
                     self.console.log(f"{verb} package '{pkg}' with setuptools", mtype="message")
                     res = self.install_setuptools(pkg)
                     if(res == 1):
@@ -412,10 +414,14 @@ class Modi:
         current_env["PYTHONPATH"] = str(Path(self.prefix) / Path(self.site_prefix))
         cwd = os.getcwd()
         os.chdir(Path(f"./{pkg}-{pkg_version}"))
-        if(self.windows):
-            inst_result = subprocess.run(f"py ./setup.py --quiet install --prefix \"{self.prefix}\"", env=current_env, shell=True)
-        else:
-            inst_result = subprocess.run(f"{sys.executable} ./setup.py --quiet install --prefix {self.prefix}", env=current_env, shell=True)
+        inst_result = 1
+        try:
+            if(self.windows):
+                inst_result = subprocess.run(f"py ./setup.py --quiet install --prefix \"{self.prefix}\"", env=current_env, shell=True, stdout=subprocess.DEVNULL, stderr=subproces.STDOUT)
+            else:
+                inst_result = subprocess.run(f"{sys.executable} ./setup.py --quiet install --prefix {self.prefix}", env=current_env, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        except:
+            pass
         self.console.log("Finished running setup.py install", mtype="completion")
         os.chdir(cwd)
         shutil.rmtree(Path(f"./{pkg}-{pkg_version}"))
