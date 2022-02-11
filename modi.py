@@ -70,7 +70,7 @@ class Output:
             os.system('clear')
 
 class Modi:
-    def __init__(self, args, mode="module"):
+    def __init__(self, args=[], mode="module"):
         self.env_home = os.getenv("HOME", "")
         global termtype
         self.console = Output(termtype)
@@ -107,20 +107,20 @@ class Modi:
     def help(self, name=""):
         self.console.log("MODI Help:", mtype="info")
         if name not in ["install", "help", "remove"]:
-            self.console.log("- modi.py install [args] : Installs one or more packages", mtype="info")
-            self.console.log("- modi.py help [cmd]     : Shows the help page, either this or the detailed view for [cmd]", mtype="info")
+            self.console.log(f"- {self.fmt_code('modi.py install [args]')} : Installs one or more packages", mtype="info")
+            self.console.log(f"- {self.fmt_code('modi.py help [cmd]')}     : Shows the help page, either this or the detailed view for cmd", mtype="info")
         elif name == "install":
-            self.console.log("- modi.py install <package> [package] [...]         : Installs one or more packages to the global MODI cache (by default @ ~/.modi_cache)", mtype="info")
-            self.console.log("  > modi.py install @<package> [package] [...]      : Same as above, but forcing use of the setuptools install method. Use if the previous option isn't working.", mtype="info")
-            self.console.log("- modi.py install local <package> [package] [...]   : Installs one or more packages to the current working directory. This means they can be directly imported using `import <package>`", mtype="info")
-            self.console.log("  > modi.py install local @<package> [package] [...]: Same as above, but forcing use of the setuptools install method. Use if the previous option isn't working.", mtype="info")
+            self.console.log(f"- {self.fmt_code('modi.py install <package> [package] [...]')}         : Installs one or more packages to the global MODI cache (by default @ ~/.modi_cache)", mtype="info")
+            self.console.log(f"  > {self.fmt_code('modi.py install @<package> [package] [...]')}      : Same as above, but forcing use of the setuptools install method. Use if the previous option isn't working.", mtype="info")
+            self.console.log(f"- {self.fmt_code('modi.py install local <package> [package] [...]')}   : Installs one or more packages to the current working directory. This means they can be directly imported using `import <package>`", mtype="info")
+            self.console.log(f"  > {self.fmt_code('modi.py install local @<package> [package] [...]')}: Same as above, but forcing use of the setuptools install method. Use if the previous option isn't working.", mtype="info")
         elif name == "remove":
-            self.console.log("- modi.py remove <package> [package] [...]        : Removes one or more packages from the global MODI cache.", mtype="info")
-            self.console.log("  > modi.py remove local <package> [package] [...]: Removes one or more packages from the current working directory.", mtype="info")
-            self.console.log("  > modi.py remove local all                      : Removes all packages and subdirectories in the CWD, leaving only python files (and some special directories such as `.git`", mtype="info")
+            self.console.log(f"- {self.fmt_code('modi.py remove <package> [package] [...]')}        : Removes one or more packages from the global MODI cache.", mtype="info")
+            self.console.log(f"  > {self.fmt_code('modi.py remove local <package> [package] [...]')}: Removes one or more packages from the current working directory.", mtype="info")
+            self.console.log(f"  > {self.fmt_code('modi.py remove local all')}                      : Removes all packages and subdirectories in the CWD, leaving only python files (and some special directories such as `.git`", mtype="info")
         elif name == "help":
-            self.console.log("- modi.py help        : Shows the short help view for MODI.", mtype="info")
-            self.console.log("  > modi.py help [cmd]: Shows detailed help for a specific command.", mtype="info")
+            self.console.log(f"- {self.fmt_code('modi.py help')}        : Shows the short help view for MODI.", mtype="info")
+            self.console.log(f"  > {self.fmt_code('modi.py help [cmd]')}: Shows detailed help for a specific command.", mtype="info")
 
 
     def parseargs(self, *args):
@@ -171,6 +171,32 @@ class Modi:
                     pass
             elif "egg" in fd and "info" not in fd:
                 copy_list = []
+                if(not os.path.isdir(Path(f"{path}/{fd}"))):
+                    import zipfile
+                    egg_zip = zipfile.ZipFile(Path(f"{path}/{fd}"), "r")
+                    os.makedirs(Path(f"{path}/temp"), exist_ok=True)
+                    egg_zip.extractall(str(Path(f"{path}/temp")))
+                    egg_zip.close()
+                    os.remove(Path(f"{path}/{fd}"))
+                    shutil.copytree(Path(f"{path}/temp/{fd.split('-')[0]}"), Path(f"{path}/{fd.split('-')[0]}"))
+                    shutil.rmtree(Path(f"{path}/temp"))
+                    file = fd.split('-')[0]
+                    if(file not in dest_files):
+                        if(file in self.packages):
+                            pkg_type = "package"
+                        self.console.log(f"Installing {pkg_type} '{file}'")
+                    try:
+                        shutil.copytree(Path(f"{path}/{file}"), f"{dest}/{file}")
+                    except NotADirectoryError:
+                        try:
+                            shutil.copy(Path(f"{path}/{file}"), f"{dest}/{file}")
+                        except FileExistsError:
+                            pass
+                    except FileExistsError:
+                        pass
+                    break
+
+                    
                 for file in os.listdir(Path(f"{path}/{fd}")):
                     if file != "EGG-INFO":
                         copy_list.append(file)
@@ -198,8 +224,38 @@ class Modi:
         inst_args = ["local"]
         for pkg in packages:
             inst_args.append(pkg)
-        self.console.log(inst_args)
         self.install(inst_args)
+    
+    def fmt_style(self, text, style):
+        if(self.termtype == "rich"):
+            return f"[{color}]{text}[/{color}]"
+        else:
+            return text
+
+    def fmt_code(self, text, lang="modi"):
+        cmd_list = text.split(" ")
+        fmt_string = ""
+        i = 0
+        if(self.termtype == "plain"):
+            return text
+        if(lang != "modi"):
+            import rich.syntax
+            return Syntax(text, lang)
+        for arg in cmd_list:
+            if("[" in arg and "]" in arg):
+                fmt_string += f" [bold][[dark_sea_green2]{arg[1:(len(arg) - 1)]}[/dark_sea_green2]][/bold]"
+            elif("<" in arg and ">" in arg):
+                fmt_string += f" [bold]<[light_sky_blue1]{arg[1:(len(arg) - 1)]}[/light_sky_blue1]>[/bold]"
+            elif(arg == "all"):
+                fmt_string += f" [bold dark_sea_green2]{arg}[/bold dark_sea_green2]"
+            elif(i == 0):
+                fmt_string += f"[bold light_sky_blue1]{arg}[/bold light_sky_blue1]"
+            elif("\"" in arg):
+                fmt_string += f" [gold1]{arg}[/gold1]"
+            else:
+                fmt_string += f" [plum1]{arg}[/plum1]"
+            i += 1
+        return f"[on grey15]{fmt_string}[/on grey15]"
 
     def install(self, *args):
         self.total_deps = 0
@@ -295,8 +351,12 @@ class Modi:
                 shutil.rmtree(Path("./scripts"))
             except:
                 pass
+            try:
+                shutil.rmtree(Path("./bin"))
+            except:
+                pass
         finish_time = time.perf_counter()
-        total_time = str(round(finish_time - start_time, 2))
+        total_time = str(round(finish_time - start_time, 1))
         pkg_count = str(pkg_count)
         keyword = "to Modi cache"
         package_desc = "packages"
@@ -316,7 +376,6 @@ class Modi:
     def install_pip(self, pkg):
         current_env = os.environ.copy()
         current_env["PYTHONPATH"] = str(Path(self.prefix) / Path(self.site_prefix))
-        self.console.log(os.name)
         if(os.name != "posix"):
             inst_result = subprocess.run(f"py -m pip install --disable-pip-version-check --quiet --ignore-installed --no-warn-script-location {pkg} --prefix \"{self.prefix}\"", env=current_env, shell=True)
         else:
@@ -345,12 +404,10 @@ class Modi:
         with urllib.request.urlopen(package_url) as package_req:
             with open(f"{pkg}-{pkg_version}.tar.gz", "wb") as tarf:
                 tarf.write(package_req.read())
-        self.console.log("Downloaded release tarball")
         tarball = tarfile.open(f"{pkg}-{pkg_version}.tar.gz", mode='r:gz')
         tarball.extractall(f".")
         tarball.close()
         os.remove(f"{pkg}-{pkg_version}.tar.gz")
-        self.console.log("Extracted")
         current_env = os.environ.copy()
         current_env["PYTHONPATH"] = str(Path(self.prefix) / Path(self.site_prefix))
         cwd = os.getcwd()
@@ -380,7 +437,7 @@ class Modi:
         if(args[0] == "local"):
             if(len(args) >= 2):
                 if(args[1] == "all"):
-                    if not self.console.prompt_bool("Warning: this is a potentially destructive action.\nRunning `remove local all` will delete all subdirs in this project. Continue?"):
+                    if not self.console.prompt_bool(f"Warning: this is a potentially destructive action.\nRunning {self.fmt_code('modi.py remove local all')} will delete all subdirs in this project. Continue?"):
                             return 1
                     for filename in os.listdir(Path("./")):
                         if "." in filename:
@@ -417,4 +474,4 @@ class Modi:
         self.console.log(f"Removed {str(pkg_count)} packages in {total_time} seconds", mtype="completion")
 
 if __name__ == "__main__":
-    modi_instance = Modi(sys.argv[1:], mode="interactive")
+    modi_instance = Modi(args=sys.argv[1:], mode="interactive")
