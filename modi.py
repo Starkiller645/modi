@@ -88,7 +88,7 @@ class Modi:
             with open(Path(f"{self.env_home}/.modi.json", "r")) as conf:
                 self.config = json.loads(conf.read())
         self.site_prefix = ""    
-        if(os.name != "unix"):
+        if(os.name != "posix"):
             self.windows = True
             self.site_prefix = "/lib/site-packages/"
         else:
@@ -315,7 +315,8 @@ class Modi:
     def install_pip(self, pkg):
         current_env = os.environ.copy()
         current_env["PYTHONPATH"] = str(Path(self.prefix) / Path(self.site_prefix))
-        if(os.name != "unix"):
+        self.console.log(os.name)
+        if(os.name != "posix"):
             inst_result = subprocess.run(f"py -m pip install --disable-pip-version-check --quiet --ignore-installed --no-warn-script-location {pkg} --prefix \"{self.prefix}\"", env=current_env, shell=True)
         else:
             inst_result = subprocess.run(f"'{sys.executable}' -m pip install --quiet --ignore-installed --no-warn-script-location {pkg} --prefix {self.prefix}", env=current_env, shell=True)
@@ -386,6 +387,8 @@ class Modi:
                                 try:
                                     os.remove(Path(f"./{filename}"))
                                 except PermissionError:
+                                    pass
+                                except IsADirectoryError:
                                     pass
                         else:
                             try:
