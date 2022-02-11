@@ -99,14 +99,14 @@ class Modi:
            pass 
         elif(mode == "interactive"): 
             if(self.termtype == "rich"):
-                rich.print("    Starting [sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2] v0.2")
+                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.2")
             else:
                 rich.print("    Starting MODI v0.1")
             self.parseargs(args)
 
     def help(self, name=""):
         self.console.log("MODI Help:", mtype="info")
-        if name not in ["install", "help"]:
+        if name not in ["install", "help", "remove"]:
             self.console.log("- modi.py install [args] : Installs one or more packages", mtype="info")
             self.console.log("- modi.py help [cmd]     : Shows the help page, either this or the detailed view for [cmd]", mtype="info")
         elif name == "install":
@@ -117,6 +117,7 @@ class Modi:
         elif name == "remove":
             self.console.log("- modi.py remove <package> [package] [...]        : Removes one or more packages from the global MODI cache.", mtype="info")
             self.console.log("  > modi.py remove local <package> [package] [...]: Removes one or more packages from the current working directory.", mtype="info")
+            self.console.log("  > modi.py remove local all                      : Removes all packages and subdirectories in the CWD, leaving only python files (and some special directories such as `.git`", mtype="info")
         elif name == "help":
             self.console.log("- modi.py help        : Shows the short help view for MODI.", mtype="info")
             self.console.log("  > modi.py help [cmd]: Shows detailed help for a specific command.", mtype="info")
@@ -179,10 +180,10 @@ class Modi:
                             pkg_type = "package"
                         self.console.log(f"Installing {pkg_type} '{file}'")
                     try:
-                        shutil.copytree(Path(f"{path}/{fd}/{file}"), "{dest}/{file}")
+                        shutil.copytree(Path(f"{path}/{fd}/{file}"), f"{dest}/{file}")
                     except NotADirectoryError:
                         try:
-                            shutil.copy(Path(f"{path}/{fd}/{file}"), "{dest}/{file}")
+                            shutil.copy(Path(f"{path}/{fd}/{file}"), f"{dest}/{file}")
                         except FileExistsError:
                             pass
                     except FileExistsError:
