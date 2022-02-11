@@ -9,6 +9,7 @@ import tarfile
 import re
 import shutil
 import time
+from pathlib import Path
 termtype = "plain"
 try:
     import rich
@@ -23,7 +24,6 @@ class Output:
             self.termtype = "rich"
         else:
             self.termtype = 'plain'
-
     def log(self, text, mtype="message"):
         style = "bold"
         padding = ""
@@ -46,6 +46,22 @@ class Output:
         else:
             rich.print(f"    [[{style}]MODI[/{style}]] ([{style}]{mtype}[/{style}]) {padding} {text}  ")
 
+    def prompt_bool(self, text, mtype="warning"):
+        if self.termtype == "plain":
+            choices = ["y", "n", ""]
+            choice = " "
+            while choice.lower() not in choices:
+                choice = input(f"{text}\n[Y]es or [n]o >> ")
+            if(choice.lower() == "y" or choice.lower == ""):
+                return True
+            else:
+                return False
+        else:
+            from rich.prompt import Confirm
+            return_value = Confirm.ask(f"{text}")
+            return return_value
+
+
     def clear(self): 
         if(os.name != "posix"):
             os.system('cls')
@@ -53,24 +69,36 @@ class Output:
             os.system('clear')
 
 class Modi:
-    def __init__(self, *args):
+    def __init__(self, args, mode="module"):
         self.env_home = os.getenv("HOME", "")
         global termtype
         self.console = Output(termtype)
+        self.termtype = termtype
         try:
             with open(f"{self.env_home}/.modi.json", "r") as conf:
                 self.config = json.loads(conf.read())
         except:
             self.console.log("Config file not found, bootstrapping...", mtype="warning")
-            with open(f"{self.env_home}/.modi.json", "w") as conf:
-                filepath = f"{self.env_home}/.modi_cache/"
-                os.mkdir(f"{self.env_home}/.modi_cache/")
+            with open(Path(f"{self.env_home}/.modi.json", "w")) as conf:
+                filepath = Path(f"{self.env_home}/.modi_cache/")
+                os.mkdir(Path(f"{self.env_home}/.modi_cache/"))
                 json_conf = {"cache": {"path": filepath}}
                 conf.write(json.dumps(json_conf))
-            with open(f"{self.env_home}/.modi.json", "r") as conf:
+            with open(Path(f"{self.env_home}/.modi.json", "r")) as conf:
                 self.config = json.loads(conf.read())
-        self.console.log("Starting MODI v0.1")
-        self.parseargs(args[0])
+        self.site_prefix = ""    
+        if(os.name != "unix"):
+            self.windows = True
+            self.site_prefix = "/lib/site-packages/"
+        else:
+            self.windows = False
+            self.site_prefix = f"/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/"
+
+        if(mode == "module"):
+           pass 
+        elif(mode == "interactive"): 
+            self.console.log("Starting MODI v0.2")
+            self.parseargs(args)
 
     def help(self, name=""):
         self.console.log("MODI Help:", mtype="info")
@@ -111,51 +139,135 @@ class Modi:
         else:
             self.console.log("Error: no valid operation specified", mtype="error")
             return 1
+    
+    def copy_local(self, path, dest):
+        dest_files = os.listdir(dest)
+        loop_var = []
+               
+        if(self.termtype == "rich"):
+            loop_var = rich.progress.track(os.listdir(path), description="    Installing...", transient=True)
+        else:
+            loop_var = os.listdir(path)
+        for fd in loop_var:
+            pkg_type = "dependency"
+            if "info" not in fd and "egg" not in fd:
+                if(fd in self.packages):
+                    pkg_type = "package"
+                if(fd not in dest_files):
+                    self.console.log(f"Installing {pkg_type} '{fd}'")
+                try:
+                    shutil.copytree(Path(f"{path}/{fd}"), f"{dest}/{fd}")
+                except NotADirectoryError:
+                    try:
+                        shutil.copy(Path(f"{path}/{fd}"), f"{dest}/{fd}")
+                    except FileExistsError:
+                        pass
+                except FileExistsError:
+                    pass
+            elif "egg" in fd and "info" not in fd:
+                copy_list = []
+                for file in os.listdir(Path(f"{path}/{fd}")):
+                    if file != "EGG-INFO":
+                        copy_list.append(file)
+                for file in copy_list:
+                    if(file not in dest_files):
+                        if(file in self.packages):
+                            pkg_type = "package"
+                        self.console.log(f"Installing {pkg_type} '{file}'")
+                    try:
+                        shutil.copytree(Path(f"{path}/{fd}/{file}"), "{dest}/{file}")
+                    except NotADirectoryError:
+                        try:
+                            shutil.copy(Path(f"{path}/{fd}/{file}"), "{dest}/{file}")
+                        except FileExistsError:
+                            pass
+                    except FileExistsError:
+                        pass
+            else:
+                pass
+    def install_local(self, *args):
+        packages = []
+        for arg in args:
+            packages.append(arg[0])
+        
+        inst_args = ["local"]
+        for pkg in packages:
+            inst_args.append(pkg)
+        self.console.log(inst_args)
+        self.install(inst_args)
 
     def install(self, *args):
-        args = args[0]
+        self.tracked_pkgs = 0
+        self.packages = []
+        if(len(args) == 0):
+            return 1
+        elif(isinstance(args, str)):
+            args = list(args)
+        elif(isinstance(args, tuple)):
+            args = args[0]
+        else:
+            pass
         local = False
         cwd = ""
-        packages = []
+        self.packages = []
         if args[0] == "local":
             local = True
-            cwd = os.getcwd()
+            cwd = str(Path(os.getcwd()))
             if(len(args) > 1):
-                packages = args[1:]
+                self.packages = args[1:]
             else:
                 return 1
         else:
-            cwd = self.config["cache"]["path"]
-            packages = args
+            cwd = str(Path(self.config["cache"]["path"]))
+            self.packages = args
         self.prefix = cwd
 
         setup_py_queue = []
-        pkg_count = len(packages)
+        pkg_count = len(self.packages)
+        total_deps = 0
         start_time = time.perf_counter()
+
         global termtype
         if(termtype == "rich"):
-            for pkg in rich.progress.track(packages, description="    Installing..."):
+            count = 0
+            for pkg in rich.progress.track(self.packages, description="    Downloading & Building...", transient=True):
+
+                dep_count = 0
                 mode = "PIP"
+                verb = "Installing"
+                if(local):
+                    verb = "Downloading"
                 if(pkg[0] == "@"):
                     mode = "SETUPTOOLS"
                     pkg = pkg[1:]
 
                 if(mode == "PIP"):
-                    self.console.log(f"Installing package {pkg} with PIP", mtype="message")
+                    self.console.log(f"{verb} package '{pkg}' with PIP", mtype="message")
                     res = self.install_pip(pkg)
+                    count += 1
+                    dep_count = len(os.listdir(Path(f"{self.prefix}/{self.site_prefix}"))) - count - total_deps
+                    total_deps += dep_count
                     if(res == 1):
+                        print("Done")
+                        if(self.prefix == str(Path(os.getcwd()))):
+                            self.console.log(f"Downloaded package '{pkg}' and {str(dep_count)} dependencies", mtype="completion")    
+                        else:
+                            self.console.log(f"Installed package '{pkg}' and {str(dep_count)} dependencies", mtype="completion")
                         setup_py_queue.append(pkg)
-                    else:
-                        continue
+
                 else:
-                    self.console.log(f"Installing package {pkg} with setuptools", mtype="message")
+                    self.console.log(f"{verb} package '{pkg}' with setuptools", mtype="message")
                     res = self.install_setuptools(pkg)
                     if(res == 1):
                         self.console.log("Error: failed to install package " + pkg, mtype="error")
                     else:
-                        self.console.log(f"Installed package {pkg}", mtype="message")
+                        if(local):
+                            self.console.log(f"Downloaded and built package '{pkg}'", mtype="message")
+                        else:
+                            self.console.log(f"Installed package '{pkg}'", mtype="message")
+
         else:
-            for pkg in packages:
+            for pkg in self.packages:
                 mode = "PIP"
                 if(pkg[0] == "@"):
                     mode = "SETUPTOOLS"
@@ -172,18 +284,12 @@ class Modi:
                     else:
                         self.console.log(f"Installed package {pkg}", mtype="message")
         if(local):
-            self.console.log("Local mode selected, copying files to CWD", mtype="message")
-            for file in os.listdir("./lib/python3.10/site-packages"):
-                suffix = ""
-                try:
-                    suffix = file.split("1", 1)[1]
-                except:
-                    suffix = ""
-                if (file in packages or file.split("-")[0] in packages) and "info" not in suffix:
-                    try:
-                        shutil.copytree(f"./lib/python3.10/site-packages/{file}", f"./{file}")
-                    except FileExistsError:
-                        pass
+            self.copy_local(str(Path(f"{os.getcwd()}/{self.site_prefix}")), "./")
+            shutil.rmtree(Path("./lib"))
+            try:
+                shutil.rmtree(Path("./scripts"))
+            except:
+                pass
         finish_time = time.perf_counter()
         total_time = str(round(finish_time - start_time, 2))
         pkg_count = str(pkg_count)
@@ -194,16 +300,22 @@ class Modi:
 
     def install_pip(self, pkg):
         current_env = os.environ.copy()
-        current_env["PYTHONPATH"] = self.prefix + "/lib/site-packages/"
-        inst_result = subprocess.run(f"{sys.executable} -m pip install --quiet --ignore-installed --no-warn-script-location {pkg} --prefix {self.prefix}", env=current_env, shell=True)
+        current_env["PYTHONPATH"] = str(Path(self.prefix) / Path(self.site_prefix))
+        if(os.name != "unix"):
+            inst_result = subprocess.run(f"py -m pip install --disable-pip-version-check --quiet --ignore-installed --no-warn-script-location {pkg} --prefix \"{self.prefix}\"", env=current_env, shell=True)
+        else:
+            inst_result = subprocess.run(f"'{sys.executable}' -m pip install --quiet --ignore-installed --no-warn-script-location {pkg} --prefix {self.prefix}", env=current_env, shell=True)
         if(inst_result.returncode != 0):
             self.console.log(f"Installing package {pkg} failed, adding to setuptools queue", mtype="warning")
             return 1
         else:
-            self.console.log(f"Installed package {pkg}", mtype="completion")
+
             return 0
 
     def install_setuptools(self, pkg):
+        if(not os.path.exists(Path(f"{self.prefix}{self.site_prefix}"))):
+            path = Path(f"{self.prefix}{self.site_prefix}")
+            path.mkdir(parents=True)
         pkg_json_data = ""
         with urllib.request.urlopen(f"https://pypi.org/pypi/{pkg}/json") as res:
             pkg_json_data = res.read().decode("UTF-8")
@@ -217,19 +329,25 @@ class Modi:
         with urllib.request.urlopen(package_url) as package_req:
             with open(f"{pkg}-{pkg_version}.tar.gz", "wb") as tarf:
                 tarf.write(package_req.read())
-        
+        self.console.log("Downloaded release tarball")
         tarball = tarfile.open(f"{pkg}-{pkg_version}.tar.gz", mode='r:gz')
         tarball.extractall(f".")
+        tarball.close()
         os.remove(f"{pkg}-{pkg_version}.tar.gz")
+        self.console.log("Extracted")
         current_env = os.environ.copy()
-        current_env["PYTHONPATH"] = self.prefix + "/lib/python3.10/site-packages/"
+        current_env["PYTHONPATH"] = str(Path(self.prefix) / Path(self.site_prefix))
         cwd = os.getcwd()
-        os.chdir(f"./{pkg}-{pkg_version}")
-        inst_result = subprocess.run(f"{sys.executable} ./setup.py --quiet install --prefix {self.prefix}", env=current_env, shell=True)
+        os.chdir(Path(f"./{pkg}-{pkg_version}"))
+        if(self.windows):
+            inst_result = subprocess.run(f"py ./setup.py --quiet install --prefix \"{self.prefix}\"", env=current_env, shell=True)
+        else:
+            inst_result = subprocess.run(f"{sys.executable} ./setup.py --quiet install --prefix {self.prefix}", env=current_env, shell=True)
+        self.console.log("Finished running setup.py install", mtype="completion")
         os.chdir(cwd)
-        shutil.rmtree(f"./{pkg}-{pkg_version}")
+        shutil.rmtree(Path(f"./{pkg}-{pkg_version}"))
         try:
-            shutil.rmtree(f"{pkg}.egg-info")
+            shutil.rmtree(Path(f"./{pkg}.egg-info"))
         except:
             pass
         if(inst_result.returncode == 0):
@@ -239,29 +357,46 @@ class Modi:
     
     def remove(self, *args):
         local = False
-        packages = []
+        self.packages = []
         args = args[0]
         self.console.log("Removing packages", mtype="warning")
         start_time = time.perf_counter()
         if(args[0] == "local"):
-            packages = args[1:]
+            if(len(args) >= 2):
+                if(args[1] == "all"):
+                    if not self.console.prompt_bool("Warning: this is a potentially destructive action.\nRunning `remove local all` will delete all subdirs in this project. Continue?"):
+                            return 1
+                    for filename in os.listdir(Path("./")):
+                        if "." in filename:
+                            if(filename.split(".")[len(filename.split(".")) - 1] != "py" and "modi" not in filename):
+                                try:
+                                    os.remove(Path(f"./{filename}"))
+                                except PermissionError:
+                                    pass
+                        else:
+                            try:
+                                shutil.rmtree(Path(f"./{filename}"))
+                            except:
+                                pass
+                    return 0
+            self.packages = args[1:]
             local = True
             self.prefix = os.getcwd()
         else:
-            packages = args
+            self.packages = args
             self.prefix = self.config["cache"]["path"]
-        pkg_count = len(packages)
-        for pkg in packages:
-            for fd in os.listdir(f"{self.prefix}/lib/python3.10/site-packages/"):
+        pkg_count = len(self.packages)
+        for pkg in self.packages:
+            for fd in os.listdir(Path(f"{self.prefix}")):
                 if pkg in fd:
-                    shutil.rmtree(f"{self.prefix}/lib/python3.10/site-packages/{fd}")
+                    shutil.rmtree(Path(f"{self.prefix}/{fd}"))
             if(local):
-                for fd in os.listdir(f"{self.prefix}/"):
+                for fd in os.listdir(Path(f"{self.prefix}/")):
                     if pkg in fd:
-                        shutil.rmtree(f"{self.prefix}/{fd}")
+                        shutil.rmtree(Path(f"{self.prefix}/{fd}"))
         end_time = time.perf_counter()
         total_time = str(round(end_time - start_time, 2))
         self.console.log(f"Removed {str(pkg_count)} packages in {total_time} seconds", mtype="completion")
 
 if __name__ == "__main__":
-    modi_instance = Modi(sys.argv[1:])
+    modi_instance = Modi(sys.argv[1:], mode="interactive")
