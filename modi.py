@@ -10,6 +10,7 @@ import re
 import shutil
 import time
 from pathlib import Path
+import glob
 termtype = "plain"
 try:
     import rich
@@ -42,9 +43,9 @@ class Output:
         elif(mtype == "completion"):
             style = "bold bright_blue"
         if self.termtype == 'plain':
-            print(f"[MODI] ({mtype}) {padding} {text} ")
+            print(f"    [MODI] ({mtype}) {padding} {text} ")
         else:
-            rich.print(f"    [[{style}]MODI[/{style}]] ([{style}]{mtype}[/{style}]) {padding} {text}  ")
+            rich.print(f"    [[bold]MODI[/bold]] ([{style}]{mtype}[/{style}]) {padding} {text}  ")
 
     def prompt_bool(self, text, mtype="warning"):
         if self.termtype == "plain":
@@ -97,7 +98,10 @@ class Modi:
         if(mode == "module"):
            pass 
         elif(mode == "interactive"): 
-            self.console.log("Starting MODI v0.2")
+            if(self.termtype == "rich"):
+                rich.print("    Starting [sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2] v0.2")
+            else:
+                rich.print("    Starting MODI v0.1")
             self.parseargs(args)
 
     def help(self, name=""):
@@ -197,7 +201,7 @@ class Modi:
         self.install(inst_args)
 
     def install(self, *args):
-        self.tracked_pkgs = 0
+        self.total_deps = 0
         self.packages = []
         if(len(args) == 0):
             return 1
@@ -224,7 +228,7 @@ class Modi:
 
         setup_py_queue = []
         pkg_count = len(self.packages)
-        total_deps = 0
+        self.total_deps = 0
         start_time = time.perf_counter()
 
         global termtype
@@ -245,14 +249,14 @@ class Modi:
                     self.console.log(f"{verb} package '{pkg}' with PIP", mtype="message")
                     res = self.install_pip(pkg)
                     count += 1
-                    dep_count = len(os.listdir(Path(f"{self.prefix}/{self.site_prefix}"))) - count - total_deps
-                    total_deps += dep_count
-                    if(res == 1):
-                        print("Done")
+                    dep_count = len(glob.glob(str(Path(f"{self.prefix}/{self.site_prefix}/*[!info]")))) - count - self.total_deps
+                    self.total_deps += dep_count
+                    if(res == 0):
                         if(self.prefix == str(Path(os.getcwd()))):
                             self.console.log(f"Downloaded package '{pkg}' and {str(dep_count)} dependencies", mtype="completion")    
                         else:
                             self.console.log(f"Installed package '{pkg}' and {str(dep_count)} dependencies", mtype="completion")
+                    else:
                         setup_py_queue.append(pkg)
 
                 else:
@@ -294,9 +298,19 @@ class Modi:
         total_time = str(round(finish_time - start_time, 2))
         pkg_count = str(pkg_count)
         keyword = "to Modi cache"
+        package_desc = "packages"
+        dep_desc = "dependencies"
         if(local):
             keyword = f"locally, to {self.prefix}"
-        self.console.log(f"Installed {pkg_count} packages {keyword} in {total_time} seconds", mtype="completion") 
+        if(pkg_count == "1"):
+            package_desc = "package"
+        if(self.total_deps == 1):
+            dep_desc = "dependency"
+        elif(self.total_deps == 0):
+            dep_desc = "dependencies"
+            self.total_deps = "no"
+
+        self.console.log(f"Installed {pkg_count} {package_desc} and {self.total_deps} {dep_desc} {keyword} in {total_time} seconds", mtype="completion") 
 
     def install_pip(self, pkg):
         current_env = os.environ.copy()
@@ -395,7 +409,7 @@ class Modi:
                     if pkg in fd:
                         shutil.rmtree(Path(f"{self.prefix}/{fd}"))
         end_time = time.perf_counter()
-        total_time = str(round(end_time - start_time, 2))
+        total_time = str(round(end_time - start_time, 1))
         self.console.log(f"Removed {str(pkg_count)} packages in {total_time} seconds", mtype="completion")
 
 if __name__ == "__main__":
