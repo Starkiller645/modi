@@ -452,7 +452,8 @@ class Modi:
         for file in current_working_dir:
             if(os.path.isdir(Path(f"./{file}")) and not (file[0] == "." or file[0] == "_")):
                 final_dirs.append(file)
-            if("py" in file.split(".")[1:] and "modi" not in file.split(".")[0]):
+            if("py" in file.split(".")[1:] and "modi" not in file.split(".")[0] and file[0] != "."):
+                self.console.log(file)
                 with open(Path(file), "r") as fd:
                     if("import modi" in fd.read()):
                         requires_modi = True
@@ -708,7 +709,7 @@ class Modi:
             loop_var = os.listdir(path)
         for fd in loop_var:
             pkg_type = "dependency"
-            if "info" not in fd and "egg" not in fd:
+            if "info" not in fd and "egg" not in fd and "pth" not in fd:
                 if(fd in self.packages):
                     pkg_type = "package"
                     packages.append(fd)
@@ -730,7 +731,7 @@ class Modi:
                         pass
                 except FileExistsError:
                     pass
-            elif "egg" in fd and "info" not in fd:
+            elif "egg" in fd and "info" not in fd and "pth" not in fd:
                 copy_list = []
                 if(not os.path.isdir(Path(f"{path}/{fd}"))):
                     import zipfile
@@ -800,7 +801,7 @@ class Modi:
                 fmt_string += f" [bold][[dark_sea_green2]{arg[1:(len(arg) - 1)]}[/dark_sea_green2]][/bold]"
             elif("<" in arg and ">" in arg):
                 fmt_string += f" [bold]<[light_sky_blue1]{arg[1:(len(arg) - 1)]}[/light_sky_blue1]>[/bold]"
-            elif(arg == "all"):
+            elif(arg == "all" or arg == "auto"):
                 fmt_string += f" [bold dark_sea_green2]{arg}[/bold dark_sea_green2]"
             elif(i == 0):
                 fmt_string += f"[bold light_sky_blue1]{arg}[/bold light_sky_blue1]"
@@ -817,9 +818,9 @@ class Modi:
         current_env = os.environ.copy()
         current_env["PYTHONPATH"] = str(Path(self.prefix) / Path(self.site_prefix))
         if(os.name != "posix"):
-            inst_result = subprocess.run(f"py -m pip install --disable-pip-version-check --quiet --ignore-installed --no-warn-script-location {pkg} --prefix \"{self.prefix}\"", env=current_env, shell=True)
+            inst_result = subprocess.run(f"py -m pip install --disable-pip-version-check --quiet --ignore-installed --no-warn-script-location {pkg} --prefix \"{self.prefix}\"", env=current_env, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         else:
-            inst_result = subprocess.run(f"'{sys.executable}' -m pip install --quiet --ignore-installed --no-warn-script-location {pkg} --prefix {self.prefix}", env=current_env, shell=True)
+            inst_result = subprocess.run(f"'{sys.executable}' -m pip install --quiet --ignore-installed --no-warn-script-location {pkg} --prefix {self.prefix}", env=current_env, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         if(inst_result.returncode != 0):
             self.console.log(f"Installing package {pkg} failed, adding to setuptools queue", mtype="warning")
             return 1
@@ -853,13 +854,10 @@ class Modi:
         cwd = os.getcwd()
         os.chdir(Path(f"./{pkg}-{pkg_version}"))
         inst_result = 1
-        try:
-            if(self.windows):
-                inst_result = subprocess.run(f"py ./setup.py --quiet install --prefix \"{self.prefix}\"", env=current_env, shell=True, stdout=subprocess.DEVNULL, stderr=subproces.STDOUT)
-            else:
-                inst_result = subprocess.run(f"{sys.executable} ./setup.py --quiet install --prefix {self.prefix}", env=current_env, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-        except:
-            pass
+        if(self.windows):
+            inst_result = subprocess.run(f"py ./setup.py --quiet install --prefix \"{self.prefix}\"", env=dict(os.environ, PYTHONPATH=str(Path(f"{self.prefix}/{self.site_prefix}"))), shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        else:
+            inst_result = subprocess.run(f"{sys.executable} ./setup.py --quiet install --prefix {self.prefix}", env=current_env, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.console.log("Finished running setup.py install", mtype="completion")
         os.chdir(cwd)
         shutil.rmtree(Path(f"./{pkg}-{pkg_version}"))
