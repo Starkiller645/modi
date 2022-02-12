@@ -165,7 +165,7 @@ class Modi:
            pass 
         elif(mode == "interactive"): 
             if(self.termtype == "rich"):
-                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.2")
+                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.3")
             else:
                 print("    Starting MODI v0.1")
             self.parseargs(args)
@@ -278,14 +278,29 @@ class Modi:
                     self.console.log("Using legacy setuptools mode, dependencies will have to be installed manually", mtype="warning")
                     self.console.log(f"{verb} package '{pkg}' with setuptools", mtype="message")
                     res = self.__install_setuptools(pkg)
-                    if(res == 1):
-                        self.console.log("Error: failed to install package " + pkg, mtype="error")
+                    if(res == 1 or pkg not in os.listdir(f"{self.prefix}/{self.site_prefix}")):
+                        self.console.log("Error: failed to install package '" + pkg + "'", mtype="error")
                         pkgs_failed += 1
                     else:
                         if(local):
                             self.console.log(f"Downloaded and built package '{pkg}'", mtype="message")
                         else:
                             self.console.log(f"Installed package '{pkg}'", mtype="message")
+            if(len(setup_py_queue) > 0):
+                self.console.log("Some packages failed to install correctly, trying with setuptools", mtype="warning")
+            for pkg in rich.progress.track(setup_py_queue, description="    Downloading & Building...", transient=True):
+                self.console.log("Using legacy setuptools mode, dependencies will have to be installed manually", mtype="warning")
+                self.console.log(f"{verb} package '{pkg}' with setuptools", mtype="message")
+                res = self.__install_setuptools(pkg)
+                if(res == 1 or pkg not in os.listdir(f"{self.prefix}/{self.site_prefix}")):
+                    self.console.log("Error: failed to install package '" + pkg + "'", mtype="error")
+                    pkgs_failed += 1
+                else:
+                    if(local):
+                        self.console.log(f"Downloaded and built package '{pkg}'", mtype="message")
+                    else:
+                        self.console.log(f"Installed package '{pkg}'", mtype="message")
+
 
         else:
             for pkg in self.packages:
@@ -833,8 +848,11 @@ class Modi:
             path = Path(f"{self.prefix}{self.site_prefix}")
             path.mkdir(parents=True)
         pkg_json_data = ""
-        with urllib.request.urlopen(f"https://pypi.org/pypi/{pkg}/json") as res:
-            pkg_json_data = res.read().decode("UTF-8")
+        try:
+            with urllib.request.urlopen(f"https://pypi.org/pypi/{pkg}/json") as res:
+                pkg_json_data = res.read().decode("UTF-8")
+        except urllib.error.HTTPError:
+            return 1
         pkg_json_obj = json.loads(pkg_json_data)
         package_url = ""
         for url in pkg_json_obj["urls"]:
@@ -842,9 +860,13 @@ class Modi:
                 package_url = url["url"]
         pkg_version = pkg_json_obj["info"]["version"]
 
-        with urllib.request.urlopen(package_url) as package_req:
-            with open(f"{pkg}-{pkg_version}.tar.gz", "wb") as tarf:
-                tarf.write(package_req.read())
+        try:
+            with urllib.request.urlopen(package_url) as package_req:
+                with open(f"{pkg}-{pkg_version}.tar.gz", "wb") as tarf:
+                    tarf.write(package_req.read())
+        except:
+            self.console.log(f"Error: could not resolve source download for package '{pkg}'", mtype="error")
+            return 1
         tarball = tarfile.open(f"{pkg}-{pkg_version}.tar.gz", mode='r:gz')
         tarball.extractall(f".")
         tarball.close()

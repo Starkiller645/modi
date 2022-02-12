@@ -7,7 +7,11 @@ try:
 except ImportError:
     import importlib
     modi_inst = modi.Modi()
-    modi_inst.install_local(["PySide2"])
+    res = modi_inst.install_local(["@PySide2"])
+    if(res != 0):
+        import sys
+        print("Failed installing PySide, quitting...")
+        sys.exit(1)
     from PySide2.QtWidgets import *
 
 if(__name__ == "__main__"):
