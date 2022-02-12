@@ -76,7 +76,7 @@ class Output:
             choices = ["y", "n", ""]
             choice = " "
             while choice.lower() not in choices:
-                choice = input(f"{text}\n[Y]es or [n]o >> ")
+                choice = input(f"{text}\n    [Y]es or [n]o >> ")
             if(choice.lower() == "y" or choice.lower == ""):
                 return True
             else:
@@ -86,12 +86,38 @@ class Output:
             return_value = Confirm.ask(f"{text}")
             return return_value
     
+    def prompt_selection(self, text, choices):
+        if(self.termtype == "plain"):
+            choice_valid = False
+            print(text)
+            i = 1
+            for choice in choices:
+                print(f"{i}.   {choice}")
+                i += 1
+            choice = 0
+            while(not choice_valid):
+                choice = input(f"    Please select an option [1-{i}]\n    >>")
+                if(choice < 1 or choice > i):
+                    continue
+                try:
+                    choice = int(choice)
+                    choice_valid = True
+                except:
+                    continue
+            return choice
+        else:
+            from rich.prompt import IntPrompt
+            return_value = IntPrompt(choices=choices).ask(text)
+            return return_value
+    
     def prompt(self, text, choices=[]):
         choice = ""
         if(self.termtype == "plain"):
             if(len(choices) != 0):
                 while choice not in choices:
-                    choice = input(f"    {text}\n    Enter a choice from {choices}\n    >> ")
+                    choice = input(f"{text}\n    Enter a choice from {choices}\n    >> ")
+            else:
+                choice = input(f"    {text}\n    >> ")
             return choice
         else: 
             from rich.prompt import Prompt
@@ -141,7 +167,7 @@ class Modi:
             if(self.termtype == "rich"):
                 rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.2")
             else:
-                rich.print("    Starting MODI v0.1")
+                print("    Starting MODI v0.1")
             self.parseargs(args)
 
     # PUBLIC methods, can be called from outside of class
@@ -325,8 +351,8 @@ class Modi:
         Args:
             name (str): the name of a command to help with. Defaults to "", which shows basic help
         """
-        self.console.log("MODI Help:", mtype="info")
-        if name not in ["install", "help", "remove"]:
+        self.console.log(f"{self.__fmt_style('MODI Help:', 'bold')}", mtype="info")
+        if name not in ["install", "help", "remove", "build", "bootstrap", "setup"]:
             self.console.log(f"- {self.__fmt_code('modi.py install [args]')} : Installs one or more packages", mtype="info")
             self.console.log(f"- {self.__fmt_code('modi.py help [cmd]')}     : Shows the help page, either this or the detailed view for cmd", mtype="info")
         elif name == "install":
@@ -338,6 +364,14 @@ class Modi:
             self.console.log(f"- {self.__fmt_code('modi.py remove <package> [package] [...]')}        : Removes one or more packages from the global MODI cache.", mtype="info")
             self.console.log(f"  > {self.__fmt_code('modi.py remove local <package> [package] [...]')}: Removes one or more packages from the current working directory.", mtype="info")
             self.console.log(f"  > {self.__fmt_code('modi.py remove local all')}                      : Removes all packages and subdirectories in the CWD, leaving only python files (and some special directories such as `.git`", mtype="info")
+        elif name == "build":
+            self.console.log(f"- {self.__fmt_code('modi.py build freeze <output type> [pkg_name]')} : Builds a compressed archive in the format <output type> (either 'tar' or 'zip') from the contents of the CWD. The pkg_name will be prompted if it is not given", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py build auto <output type> [pkg_name]')}  : Builds a compressed archive in the format <output type> (either 'tar' or 'zip') from the list of requirements in ./requirements.txt", mtype="info")
+        elif name == "setup":
+            self.console.log(f"- {self.__fmt_code('modi.py setup <pkg_name>')}: Alias for {self.__fmt_code('modi.py bootstrap <pkg_name>')}")
+        elif name == "bootstrap":
+            self.console.log(f"- {self.__fmt_code('modi.py bootstrap <pkg_name>')}: Removes all other files in the CWD (except modi.py and any archive files beginning with <pkg_name>) and bootstraps the project from a corresponding archive.")
+            self.console.log(f" > e.g. {self.__fmt_code('modi.py bootstrap asciimatics')} would install a package from either 'asciimatics.zip', 'asciimatics.tar.gz' or (preferably) 'asciimatics.modi.pkg'.")
         elif name == "help":
             self.console.log(f"- {self.__fmt_code('modi.py help')}        : Shows the short help view for MODI.", mtype="info")
             self.console.log(f"  > {self.__fmt_code('modi.py help [cmd]')}: Shows detailed help for a specific command.", mtype="info")
@@ -345,7 +379,6 @@ class Modi:
 
     def parseargs(self, *args):
         args = args[0]
-        print(args[1:])
         if(len(args) <= 0):
             self.console.log("Error: no valid operation specified", mtype="error")
             return 1
@@ -364,6 +397,8 @@ class Modi:
             self.remove(args[1:])
         elif(args[0] == "build"):
             self.build(args[1:])
+        elif(args[0] == "bootstrap" or args[0] == "setup"):
+            self.bootstrap(args[1])
         else:
             self.console.log("Error: no valid operation specified", mtype="error")
             return 1
@@ -428,9 +463,10 @@ class Modi:
             if(self.termtype == "rich"):
                 pkg_name = self.console.prompt("[bold gold1]Enter a package name[/bold gold1]").replace(" ", "-")
             else:
-                pkg_name = self.console.prompt("    Enter a package name").replace(" ", "-")
+                pkg_name = self.console.prompt("    Enter a package name")#.replace(" ", "-")
         style_string = self.__fmt_style(f"{pkg_name}", 'bold light_sky_blue1')
         self.console.log(f"Building package {style_string}")
+        start_time = time.perf_counter()
         if(pkg_type == "tar"):
             comp_task = ""
             prog_bar = ""
@@ -450,7 +486,7 @@ class Modi:
             tar.close()
             shutil.rmtree(Path(f"./{pkg_name}"))
             self.console.log("Finished building tar archive", mtype="completion")
-        else:
+        elif(pkg_type == "zip"):
             self.console.log("Mode 'zip' selected, building compressed package...")
             import zipfile
             os.mkdir(Path(f"./{pkg_name}"))
@@ -466,14 +502,129 @@ class Modi:
             self.__zip_recursive(str(Path(f"./{pkg_name}")), zip_file)
             zip_file.close()
             shutil.rmtree(Path(f"./{pkg_name}"))
+        elif(pkg_type == "modi"):
+            self.console.log(f"Mode 'modi' selected, building compressed MODI package...")
+            import tarfile
+            os.mkdir(Path(f"./{pkg_name}"))
+            meta_obj = {"pkg_name": pkg_name, "dependencies": [*final_deps], "packages": [*final_pkgs]}
+            json_obj = json.dumps(meta_obj, sort_keys=True, indent=4)
+            with open(Path(f"./{pkg_name}/modi.meta.json"), "w") as meta_inf:
+                meta_inf.write(json_obj)
+            for file in final_dirs:
+                try:
+                    shutil.copy(Path(f"./{file}"), Path(f"./{pkg_name}/{file}"))
+                except:
+                    try:
+                        shutil.copytree(Path(f"./{file}"), Path(f"./{pkg_name}/{file}"))
+                    except:
+                        self.console.log(f"Could not copy file '{file}' to compressed archive, skipping", mtype="warning")
+            tar = tarfile.open(Path(f"./{pkg_name}.modi.pkg"), 'w:gz', compresslevel=4)
+            tar.add(Path(f"./{pkg_name}"))
+            tar.close()
+            shutil.rmtree(Path(f"./{pkg_name}"))
+            self.console.log("Finished building modi package", mtype="completion")
         if(args[0] == "auto"):
             files_to_delete = [*final_deps, *final_pkgs]
-            print(files_to_delete)
             self.console.log("Cleaning up local directory...")
             self.remove(["local", *files_to_delete], warn=False)
-        self.console.log(f"Finished building package {pkg_name}", mtype="completion")
+            style_string = self.__fmt_style(f"{pkg_name}", 'bold light_sky_blue1')
+        finish_time = time.perf_counter()
+        total_time = round(finish_time - start_time, 1)
+        self.console.log(f"Finished building package {style_string} in {total_time} seconds", mtype="completion")
         return 0
 
+    def bootstrap(self, package_name):
+        """Bootstrap a project from a .zip, .tar.gz or (ideally) .modi.pkg file to the CWD
+        
+        Args:
+            package_name (str): the name of the package to install, without extension
+
+        Returns:
+            0: if the archive extracted successfully
+            1: if there was an error during archive extraction
+        """
+        valid_files = []
+        self.console.log(f"Bootstrapping project {package_name}")
+        for file in os.listdir(Path(f"./")):
+            if package_name in file.split(".")[0] and file.split(".")[len(file.split(".")) - 1] in ["gz", "pkg", "zip"]:
+                valid_files.append(file)
+        if(len(valid_files) == 0):
+            self.console.log(f"Error: Could not find package {package_name} in current directory", mtype="error")
+            return 1
+        correct_file = ""
+        current_dir = os.listdir(Path("./"))
+        current_dir.remove("modi.py")
+        for file in valid_files:
+            current_dir.remove(file)
+        if(len(valid_files) > 1):
+            correct_file = valid_files[self.console.prompt_selection(f"    There were multiple valid files to install. Please select {self.__fmt_style('one', 'bold')}", valid_files) - 1]
+        else:
+            correct_file = valid_files[0]
+
+        if(len(current_dir) > 0):
+            self.console.log("The current directory contains files other than modi.py and packages. If you choose to continue, they will be deleted.", mtype="warning")
+            choice = self.console.prompt_bool("    Continue?")
+            if(not choice):
+                return 1
+
+        for file in current_dir:
+            try:
+                os.remove(Path(f"./{file}"))
+            except IsADirectoryError:
+                shutil.rmtree(Path(f"./{file}"))
+    
+        shutil.copy(Path(f"./modi.py"), Path("./modi.py.bak"))
+
+        file_style_string = self.__fmt_style(correct_file, 'bold orchid1')
+        package_style_string = self.__fmt_style(package_name, 'bold light_sky_blue1')
+        self.console.log(f"Extracting project {package_style_string} from {file_style_string}")
+        start_time = time.perf_counter()
+        file_ext = correct_file.split(".")[len(correct_file.split(".")) - 1]
+        file_meta = ""
+        if(file_ext == "zip"):
+            import zipfile
+            zip_hdl = zipfile.ZipFile(Path(f"./{correct_file}"))
+            zip_hdl.extractall(Path("./"))
+            zip_hdl.close()
+            self.console.log(f"{self.__fmt_style('Zip archive', 'bold gold1')} selected, cannot auto-generate requirements.txt", mtype="warning")
+        else:
+            import tarfile
+            tar_hdl = tarfile.open(Path(f"./{correct_file}"))
+            tar_hdl.extractall(Path("./"))
+            if(file_ext != "pkg"):
+                self.console.log(f"{self.__fmt_style('Tar-GZ archive', 'bold gold1')} selected, cannot auto-generate requirements.txt", mtype="warning")
+
+        for file in os.listdir(Path(f"./{package_name}")):
+            try:
+                shutil.copytree(Path(f"./{package_name}/{file}"), Path(f"./{file}"))
+            except NotADirectoryError:
+                shutil.copy(Path(f"./{package_name}/{file}"), Path(f"./{file}")) 
+
+        shutil.rmtree(Path(f"./{package_name}"))
+        shutil.copy(Path("./modi.py.bak"), Path("./modi.py"))
+        os.remove(Path("./modi.py.bak"))
+
+        if(file_ext == "pkg"):
+            try:
+                with open(Path("./modi.meta.json")) as meta_file:
+                    file_meta = json.loads(meta_file.read())
+                os.remove(Path("./modi.meta.json"))
+            except:
+                self.console.log("Invalid or missing meta-information file, cannot write requirements.txt", mtype="warning")
+
+        final_deps = [*file_meta["dependencies"], *file_meta["packages"]]
+        if(file_meta != ""):
+            with open(Path("./requirements.txt"), "w") as req_file:
+                for dep in final_deps:
+                    req_file.write(dep)
+        finish_time = time.perf_counter()
+        total_time = round(finish_time - start_time, 1)
+        if(file_ext == "pkg"):
+            self.console.log(f"Successfully bootstrapped package {package_name} and {len(final_deps)} dependencies in {total_time} seconds", mtype="completion")
+        else:
+            self.console.log(f"Successfully bootstrapped package {package_name} and all dependencies in {total_time} seconds", mtype="completion")
+        return 0
+        
 
     def remove(self, args, local=False, warn=True):
         """Remove one or more packages from CWD or global cache
@@ -492,7 +643,7 @@ class Modi:
             if(len(args) >= 2):
                 if(args[1] == "all"):
                     if(warn):
-                        if not self.console.prompt_bool(f"Warning: this is a potentially destructive action.\nRunning {self.__fmt_code('modi.py remove local all')} will delete all subdirs in this project. Continue?"):
+                        if not self.console.prompt_bool(f"    Warning: this is a potentially destructive action.\n    Running {self.__fmt_code('modi.py remove local all')} will delete all subdirs in this project. Continue?"):
                                 return 1
                     for filename in os.listdir(Path("./")):
                         if "." in filename:
@@ -519,11 +670,17 @@ class Modi:
         for pkg in self.packages:
             for fd in os.listdir(Path(f"{self.prefix}")):
                 if pkg in fd:
-                    shutil.rmtree(Path(f"{self.prefix}/{fd}"))
+                    try:
+                        shutil.rmtree(Path(f"{self.prefix}/{fd}"))
+                    except NotADirectoryError:
+                        os.remove(Path(f"{self.prefix}/{fd}"))
             if(local):
                 for fd in os.listdir(Path(f"{self.prefix}/")):
                     if pkg in fd:
-                        shutil.rmtree(Path(f"{self.prefix}/{fd}"))
+                        try:
+                            shutil.rmtree(Path(f"{self.prefix}/{fd}"))
+                        except:
+                            os.remove(Path(f"{self.prefix}/{fd}"))
         end_time = time.perf_counter()
         total_time = str(round(end_time - start_time, 1))
         self.console.log(f"Removed {str(pkg_count)} packages in {total_time} seconds", mtype="completion")
@@ -634,7 +791,7 @@ class Modi:
         fmt_string = ""
         i = 0
         if(self.termtype == "plain"):
-            return text
+            return f"`{text}`"
         if(lang != "modi"):
             import rich.syntax
             return Syntax(text, lang)
