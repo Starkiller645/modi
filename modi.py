@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+"""Modi: a local package installer for python3 (and output helper class).
+
+Modi is a local package installer that can install PyPi and setuptools packages to
+either a global cache or directly into the CWD, for easy import and packaging. It can
+also build egg files and sdists that it can install at a later date, using modi.py build
+
+    Typical usage example:
+
+    import modi
+    modi_instance = modi.Modi()
+    modi_instance.install(["asciimatics"]) # installs to global cache
+    modi_instance.install(["rich", "PyQt5", "colorama"]) # installs multiple pkgs to CWD
+    modi_instance.build("freeze") # builds a zip-file from installed packages and python files
+"""
 
 import json
 import os
@@ -21,32 +35,41 @@ except ImportError:
     termtype = "plain"
 
 class Output:
-    def __init__(self, termtype):
+    def __init__(self, termtype, loudness):
         if(termtype == "rich"):
             self.termtype = "rich"
         else:
             self.termtype = 'plain'
+        self.loudness = loudness
+
+    def set_loudness(self, loudness):
+        self.loudness = loudness
+
     def log(self, text, mtype="message"):
+        if(self.loudness == "off"):
+            return
         style = "bold"
         padding = ""
         if(mtype == "error"):
             style = "bold red"
             padding += " " * 5
+        elif(mtype == "warning"):
+            style = "bold yellow"
+            padding += " " * 3
         elif(mtype == "info"):
             style = "bold cyan"
             padding += " " * 6
         elif(mtype == "message"):
             style = "bold green"
             padding += " " * 3
-        elif(mtype == "warning"):
-            style = "bold yellow"
-            padding += " " * 3
         elif(mtype == "completion"):
             style = "bold bright_blue"
         if self.termtype == 'plain':
-            print(f"    [MODI] ({mtype}) {padding} {text} ")
+            if((self.loudness == "quiet" and mtype not in ["message", "info", "completion"]) or self.loudness == "norm" and self.loudness != "off"):
+                print(f"    [MODI] ({mtype}) {padding} {text} ")
         else:
-            rich.print(f"    [[bold]MODI[/bold]] ([{style}]{mtype}[/{style}]) {padding} {text}  ")
+            if((self.loudness == "quiet" and mtype not in ["message", "info", "completion"]) or self.loudness == "norm" and self.loudness != "off"):
+                rich.print(f"    [[bold]MODI[/bold]] ([{style}]{mtype}[/{style}]) {padding} {text}  ")
 
     def prompt_bool(self, text, mtype="warning"):
         if self.termtype == "plain":
@@ -62,19 +85,35 @@ class Output:
             from rich.prompt import Confirm
             return_value = Confirm.ask(f"{text}")
             return return_value
+    
+    def prompt(self, text, choices=[]):
+        choice = ""
+        if(self.termtype == "plain"):
+            if(len(choices) != 0):
+                while choice not in choices:
+                    choice = input(f"    {text}\n    Enter a choice from {choices}\n    >> ")
+            return choice
+        else: 
+            from rich.prompt import Prompt
+            if(len(choices) == 0):
+                choice = Prompt.ask(f"    {text}")
+            else:
+                choice = Prompt.ask(f"    {text}", choices=choices)
+            return choice
+    
 
 
-    def clear(self): 
-        if(os.name != "posix"):
-            os.system('cls')
-        else:
+def clear(self): 
+    if(os.name != "posix"):
+        os.system('cls')
+    else:
             os.system('clear')
 
 class Modi:
-    def __init__(self, args=[], mode="module"):
+    def __init__(self, args=[], mode="module", loudness="norm"):
         self.env_home = os.getenv("HOME", "")
         global termtype
-        self.console = Output(termtype)
+        self.console = Output(termtype, loudness)
         self.termtype = termtype
         try:
             with open(f"{self.env_home}/.modi.json", "r") as conf:
@@ -88,14 +127,14 @@ class Modi:
                 conf.write(json.dumps(json_conf))
             with open(Path(f"{self.env_home}/.modi.json", "r")) as conf:
                 self.config = json.loads(conf.read())
-        self.site_prefix = ""    
+        self.site_prefix = ""
         if(os.name != "posix"):
             self.windows = True
             self.site_prefix = "/lib/site-packages/"
         else:
             self.windows = False
             self.site_prefix = f"/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/"
-
+        
         if(mode == "module"):
            pass 
         elif(mode == "interactive"): 
@@ -105,27 +144,208 @@ class Modi:
                 rich.print("    Starting MODI v0.1")
             self.parseargs(args)
 
+    # PUBLIC methods, can be called from outside of class
+    # | | |
+    # v v v
+
+    def install_local(self, args, return_deps=False):
+        """Wrap Modi.install to install local packages more easily
+        
+        Args:
+            *args: a list of packages to install locally from PyPi (variadic)
+
+        Returns:
+            1: if Modi.install failed to install any one of the requested packages
+            0: if all packages downloaded and installed successfully
+        """
+        packages = []
+        for arg in args:
+            packages.append(arg)
+        inst_args = ["local"]
+
+        for pkg in packages:
+            inst_args.append(pkg)
+        return self.install(inst_args, return_deps)
+
+    def install(self, args, return_deps=False):
+        """Install a package available from PyPi, either to the global cache or to the CWD
+
+        Args:
+            *args: a list of packages to install from PyPi, optionally with "local" as the first parameter which indicates that local mode shoudl be used (variadic)
+
+        Returns:
+            1: if the method failed to install any one of the requested packages
+            0: if all packages downloaded and installed successfully
+        """
+
+        self.total_deps = 0
+        self.packages = []
+        if(len(args) == 0):
+            return 1
+        elif(isinstance(args, str)):
+            args = list(args)
+        elif(isinstance(args, tuple)):
+            args = args[0]
+        else:
+            pass
+        local = False
+        cwd = ""
+        self.packages = []
+        if args[0] == "local":
+            local = True
+            cwd = str(Path(os.getcwd()))
+            if(len(args) > 1):
+                if(args[1] == "auto" or args[1] == "all"):
+                    try:
+                        with open(Path("./requirements.txt"), "r") as reqs:
+                            for line in reqs.readlines():
+                                line = line.strip()
+                                if(line[0] != "-" and line[0] != "." and line != ""):
+                                    self.packages.append(line.split("=")[0])
+                    except FileNotFoundError:
+                        self.console.log("Error: could not find ./requirements.txt while attempting autoinstall", mtype="error")
+                        return 1
+                else:
+                    self.packages = args[1:]
+            else:
+                return 1
+        else:
+            cwd = str(Path(self.config["cache"]["path"]))
+            self.packages = args
+        self.prefix = cwd
+
+        setup_py_queue = []
+        pkg_count = len(self.packages)
+        self.total_deps = 0
+        start_time = time.perf_counter()
+        pkgs_failed = 0
+
+        global termtype
+        if(termtype == "rich"):
+            count = 0
+            for pkg in rich.progress.track(self.packages, description="    Downloading & Building...", transient=True):
+
+                dep_count = 0
+                mode = "PIP"
+                verb = "Installing"
+                if(local):
+                    verb = "Downloading"
+                if(pkg[0] == "@"):
+                    mode = "SETUPTOOLS"
+                    pkg = pkg[1:]
+
+                if(mode == "PIP"):
+                    self.console.log(f"{verb} package '{pkg}' with PIP", mtype="message")
+                    res = self.__install_pip(pkg)
+                    count += 1
+                    dep_count = len(glob.glob(str(Path(f"{self.prefix}/{self.site_prefix}/*[!info]")))) - count - self.total_deps
+                    self.total_deps += dep_count
+                    if(res == 0):
+                        if(self.prefix == str(Path(os.getcwd()))):
+                            self.console.log(f"Downloaded package '{pkg}' and {str(dep_count)} dependencies", mtype="completion")
+                        else:
+                            self.console.log(f"Installed package '{pkg}' and {str(dep_count)} dependencies", mtype="completion")
+                    else:
+                        setup_py_queue.append(pkg)
+
+                else:
+                    self.console.log("Using legacy setuptools mode, dependencies will have to be installed manually", mtype="warning")
+                    self.console.log(f"{verb} package '{pkg}' with setuptools", mtype="message")
+                    res = self.__install_setuptools(pkg)
+                    if(res == 1):
+                        self.console.log("Error: failed to install package " + pkg, mtype="error")
+                        pkgs_failed += 1
+                    else:
+                        if(local):
+                            self.console.log(f"Downloaded and built package '{pkg}'", mtype="message")
+                        else:
+                            self.console.log(f"Installed package '{pkg}'", mtype="message")
+
+        else:
+            for pkg in self.packages:
+                mode = "PIP"
+                if(pkg[0] == "@"):
+                    mode = "SETUPTOOLS"
+                    pkg = pkg[1:]
+                self.console.log(f"Installing package {pkg}", mtype="message")
+                if(mode == "PIP"):
+                    res = self.__install_pip(pkg)
+                    if(res == 1):
+                        setup_py_queue.append(pkg)
+                else:
+                    res = self.__install_setuptools(pkg)
+                    if(res == 1):
+                        self.console.log("Error: failed to install package " + pkg, mtype="error")
+                        pkgs_failed += 1
+                    else:
+                        self.console.log(f"Installed package {pkg}", mtype="message")
+        final_deps = []
+        final_pkgs = []
+        if(local):
+            if(return_deps):
+                final_deps, final_pkgs = self.__copy_local(str(Path(f"{os.getcwd()}/{self.site_prefix}")), "./", return_deps=True)
+            else:
+                self.__copy_local(str(Path(f"{os.getcwd()}/{self.site_prefix}")), "./")
+            shutil.rmtree(Path("./lib"))
+            try:
+                shutil.rmtree(Path("./scripts"))
+            except:
+                pass
+            try:
+                shutil.rmtree(Path("./bin"))
+            except:
+                pass
+        finish_time = time.perf_counter()
+        total_time = str(round(finish_time - start_time, 1))
+        pkg_count = str(pkg_count)
+        keyword = "to Modi cache"
+        package_desc = "packages"
+        dep_desc = "dependencies"
+        if(local):
+            keyword = f"locally, to {self.prefix}"
+        if(pkg_count == "1"):
+            package_desc = "package"
+        if(self.total_deps == 1):
+            dep_desc = "dependency"
+        elif(self.total_deps == 0):
+            dep_desc = "dependencies"
+            self.total_deps = "no"
+
+        self.console.log(f"Installed {int(pkg_count) - pkgs_failed} {package_desc} and {self.total_deps} {dep_desc} {keyword} in {total_time} seconds", mtype="completion")
+        if(return_deps):
+            return final_deps, final_pkgs
+        if(pkgs_failed > 0):
+            self.console.log(f"Failed to install {pkgs_failed} package(s). Check the logs for details", mtype="warning")
+            return 1
+        return 0
+
     def help(self, name=""):
+        """Print usage help information to stdout, for interactive-mode commands.
+        
+        Args:
+            name (str): the name of a command to help with. Defaults to "", which shows basic help
+        """
         self.console.log("MODI Help:", mtype="info")
         if name not in ["install", "help", "remove"]:
-            self.console.log(f"- {self.fmt_code('modi.py install [args]')} : Installs one or more packages", mtype="info")
-            self.console.log(f"- {self.fmt_code('modi.py help [cmd]')}     : Shows the help page, either this or the detailed view for cmd", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py install [args]')} : Installs one or more packages", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py help [cmd]')}     : Shows the help page, either this or the detailed view for cmd", mtype="info")
         elif name == "install":
-            self.console.log(f"- {self.fmt_code('modi.py install <package> [package] [...]')}         : Installs one or more packages to the global MODI cache (by default @ ~/.modi_cache)", mtype="info")
-            self.console.log(f"  > {self.fmt_code('modi.py install @<package> [package] [...]')}      : Same as above, but forcing use of the setuptools install method. Use if the previous option isn't working.", mtype="info")
-            self.console.log(f"- {self.fmt_code('modi.py install local <package> [package] [...]')}   : Installs one or more packages to the current working directory. This means they can be directly imported using `import <package>`", mtype="info")
-            self.console.log(f"  > {self.fmt_code('modi.py install local @<package> [package] [...]')}: Same as above, but forcing use of the setuptools install method. Use if the previous option isn't working.", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py install <package> [package] [...]')}         : Installs one or more packages to the global MODI cache (by default @ ~/.modi_cache)", mtype="info")
+            self.console.log(f"  > {self.__fmt_code('modi.py install @<package> [package] [...]')}      : Same as above, but forcing use of the setuptools install method. Use if the previous option isn't working.", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py install local <package> [package] [...]')}   : Installs one or more packages to the current working directory. This means they can be directly imported using `import <package>`", mtype="info")
+            self.console.log(f"  > {self.__fmt_code('modi.py install local @<package> [package] [...]')}: Same as above, but forcing use of the setuptools install method. Use if the previous option isn't working.", mtype="info")
         elif name == "remove":
-            self.console.log(f"- {self.fmt_code('modi.py remove <package> [package] [...]')}        : Removes one or more packages from the global MODI cache.", mtype="info")
-            self.console.log(f"  > {self.fmt_code('modi.py remove local <package> [package] [...]')}: Removes one or more packages from the current working directory.", mtype="info")
-            self.console.log(f"  > {self.fmt_code('modi.py remove local all')}                      : Removes all packages and subdirectories in the CWD, leaving only python files (and some special directories such as `.git`", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py remove <package> [package] [...]')}        : Removes one or more packages from the global MODI cache.", mtype="info")
+            self.console.log(f"  > {self.__fmt_code('modi.py remove local <package> [package] [...]')}: Removes one or more packages from the current working directory.", mtype="info")
+            self.console.log(f"  > {self.__fmt_code('modi.py remove local all')}                      : Removes all packages and subdirectories in the CWD, leaving only python files (and some special directories such as `.git`", mtype="info")
         elif name == "help":
-            self.console.log(f"- {self.fmt_code('modi.py help')}        : Shows the short help view for MODI.", mtype="info")
-            self.console.log(f"  > {self.fmt_code('modi.py help [cmd]')}: Shows detailed help for a specific command.", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py help')}        : Shows the short help view for MODI.", mtype="info")
+            self.console.log(f"  > {self.__fmt_code('modi.py help [cmd]')}: Shows detailed help for a specific command.", mtype="info")
 
 
     def parseargs(self, *args):
         args = args[0]
+        print(args[1:])
         if(len(args) <= 0):
             self.console.log("Error: no valid operation specified", mtype="error")
             return 1
@@ -142,15 +362,190 @@ class Modi:
                 self.help(name=args[1])
         elif(args[0] == "remove"):
             self.remove(args[1:])
+        elif(args[0] == "build"):
+            self.build(args[1:])
         else:
             self.console.log("Error: no valid operation specified", mtype="error")
             return 1
-    
-    def copy_local(self, path, dest):
+
+    def build(self, args, freeze=False, mode="package", pkg_type="tar", pkg_name=""):
+        """Build a package from the contents of the current working directory.
+        
+        Args:
+            freeze (bool): Whether to freeze the CWD. If False, install packages from requirements.txt first.
+            mode (str): "package" or "egg". Describes the type of file which will be produced - either a zipped version of the CWD, or a setuptools egg file.
+            pkg_type (str): "tar" or "zip". If 'mode' is set to "package", describes the archive format which will be used.
+            pkg_name (str): The name of the package to be produces
+            args* (variadic): A string command which summarises the operation to be performed. Should only be used in interactive mode to parse a command line.
+        Returns:
+            1: If the package failed to build for any reason
+            pkg_name: The path of the package relative to the CWD, if successfully built
+        """
+        mode = "package"
+        if(args[0] == "freeze"):
+            self.console.log("Building package from current working directory state")
+            freeze = True
+        elif(args[0] == "auto"):
+            self.console.log("Building package from requirements.txt")
+            freeze = False
+        else:
+            self.console.log("Error: invalid or no operation specified. Please use either 'auto' or 'freeze'", mtype="error")
+            return 1
+        if(len(args) > 1):
+            pkg_type = args[1]
+        if(len(args) > 2):
+            pkg_name = args[2]
+        packages = []
+        final_deps, final_pkgs = [], []
+        if(freeze):
+            pass
+        else:
+            try:
+                with open("requirements.txt", "r") as reqs:
+                    for line in reqs.readlines():
+                        line = line.strip()
+                        if(line[0] != "-" and line[0] != "." and line != ""):
+                            packages.append(line.split("=")[0])
+            except FileNotFoundError:
+                self.console.log("Error: 'auto' mode selected but could not find ./requirements.txt", mtype="error")
+                return 1
+            final_deps, final_pkgs = self.install_local(packages, return_deps=True)
+
+        current_working_dir = os.listdir(Path("./"))
+        final_dirs = []
+        requires_modi = False
+        for file in current_working_dir:
+            if(os.path.isdir(Path(f"./{file}")) and not (file[0] == "." or file[0] == "_")):
+                final_dirs.append(file)
+            if("py" in file.split(".")[1:] and "modi" not in file.split(".")[0]):
+                with open(Path(file), "r") as fd:
+                    if("import modi" in fd.read()):
+                        requires_modi = True
+                final_dirs.append(file)
+        if(requires_modi):
+            final_dirs.append(Path("./modi.py"))
+        if(pkg_name == ""):
+            if(self.termtype == "rich"):
+                pkg_name = self.console.prompt("[bold gold1]Enter a package name[/bold gold1]").replace(" ", "-")
+            else:
+                pkg_name = self.console.prompt("    Enter a package name").replace(" ", "-")
+        style_string = self.__fmt_style(f"{pkg_name}", 'bold light_sky_blue1')
+        self.console.log(f"Building package {style_string}")
+        if(pkg_type == "tar"):
+            comp_task = ""
+            prog_bar = ""
+            self.console.log(f"Mode 'tar' selected, building compressed package...")
+            import tarfile
+            os.mkdir(Path(f"./{pkg_name}"))
+            for file in final_dirs:
+                try:
+                    shutil.copy(Path(f"./{file}"), Path(f"./{pkg_name}/{file}"))
+                except:
+                    try:
+                        shutil.copytree(Path(f"./{file}"), Path(f"./{pkg_name}/{file}"))
+                    except:
+                        self.console.log(f"Could not copy file '{file}' to compressed archive, skipping", mtype="warning")
+            tar = tarfile.open(Path(f"./{pkg_name}.tar.gz"), 'w:gz', compresslevel=4)
+            tar.add(Path(f"./{pkg_name}"))
+            tar.close()
+            shutil.rmtree(Path(f"./{pkg_name}"))
+            self.console.log("Finished building tar archive", mtype="completion")
+        else:
+            self.console.log("Mode 'zip' selected, building compressed package...")
+            import zipfile
+            os.mkdir(Path(f"./{pkg_name}"))
+            for file in final_dirs:
+                try:
+                    shutil.copy(Path(f"./{file}"), Path(f"./{pkg_name}/{file}"))
+                except:
+                    try:
+                        shutil.copytree(Path(f"./{file}"), Path(f"./{pkg_name}/{file}"))
+                    except:
+                        self.console.log(f"Could not copy file '{file}' to compressed archive, skipping", mtype="warning")
+            zip_file = zipfile.ZipFile(Path(f"./{pkg_name}.zip"), mode="w")
+            self.__zip_recursive(str(Path(f"./{pkg_name}")), zip_file)
+            zip_file.close()
+            shutil.rmtree(Path(f"./{pkg_name}"))
+        if(args[0] == "auto"):
+            files_to_delete = [*final_deps, *final_pkgs]
+            print(files_to_delete)
+            self.console.log("Cleaning up local directory...")
+            self.remove(["local", *files_to_delete], warn=False)
+        self.console.log(f"Finished building package {pkg_name}", mtype="completion")
+        return 0
+
+
+    def remove(self, args, local=False, warn=True):
+        """Remove one or more packages from CWD or global cache
+
+        Args:
+            local (bool): Whether to operate on only the CWD. Allows use of 'all' in *args
+            *args (variadic): A list of packages to remove. If 'local' is True and args[2] is 'all', remove all subdirectories in the CWD
+        Returns:
+            0: Always, even if some packages failed to delete.
+        """
+        self.packages = []
+        self.console.log("Removing packages", mtype="warning")
+        start_time = time.perf_counter()
+        if(args[0] == "local"):
+            local = True
+            if(len(args) >= 2):
+                if(args[1] == "all"):
+                    if(warn):
+                        if not self.console.prompt_bool(f"Warning: this is a potentially destructive action.\nRunning {self.__fmt_code('modi.py remove local all')} will delete all subdirs in this project. Continue?"):
+                                return 1
+                    for filename in os.listdir(Path("./")):
+                        if "." in filename:
+                            if(filename != "requirements.txt" and filename.split(".")[len(filename.split(".")) - 1] != "py" and "modi" not in filename and ".tar" not in filename and ".zip" not in filename):
+                                try:
+                                    os.remove(Path(f"./{filename}"))
+                                except PermissionError:
+                                    pass
+                                except IsADirectoryError:
+                                    pass
+                        else:
+                            try:
+                                shutil.rmtree(Path(f"./{filename}"))
+                            except:
+                                pass
+                    return 0
+            self.packages = args[1:]
+            local = True
+            self.prefix = os.getcwd()
+        else:
+            self.packages = args
+            self.prefix = self.config["cache"]["path"]
+        pkg_count = len(self.packages)
+        for pkg in self.packages:
+            for fd in os.listdir(Path(f"{self.prefix}")):
+                if pkg in fd:
+                    shutil.rmtree(Path(f"{self.prefix}/{fd}"))
+            if(local):
+                for fd in os.listdir(Path(f"{self.prefix}/")):
+                    if pkg in fd:
+                        shutil.rmtree(Path(f"{self.prefix}/{fd}"))
+        end_time = time.perf_counter()
+        total_time = str(round(end_time - start_time, 1))
+        self.console.log(f"Removed {str(pkg_count)} packages in {total_time} seconds", mtype="completion")
+        return 0
+
+
+
+    # PRIVATE methods. These should NOT be called directly, they will be invoked when needed
+    # | | |
+    # v v v
+
+    def __zip_recursive(self, path, zip_handle):
+        for root, dirs, files in os.walk(path):
+            for file in files:
+                zip_handle.write(os.path.join(root, file))
+        
+    def __copy_local(self, path, dest, return_deps=False):
         dest_files = os.listdir(dest)
+        dependencies = []
+        packages = []
         loop_var = []
-               
-        if(self.termtype == "rich"):
+        if(self.termtype == "rich" and self.console.loudness == "norm"):
             loop_var = rich.progress.track(os.listdir(path), description="    Installing...", transient=True)
         else:
             loop_var = os.listdir(path)
@@ -159,7 +554,13 @@ class Modi:
             if "info" not in fd and "egg" not in fd:
                 if(fd in self.packages):
                     pkg_type = "package"
+                    packages.append(fd)
+                if("." in fd):
+                    pkg_type = "file dependency"
+                    dependencies.append(fd)
                 if(fd not in dest_files):
+                    if(pkg_type == "dependency"):
+                        dependencies.append(fd)
                     self.console.log(f"Installing {pkg_type} '{fd}'")
                 try:
                     shutil.copytree(Path(f"{path}/{fd}"), f"{dest}/{fd}")
@@ -167,6 +568,8 @@ class Modi:
                     try:
                         shutil.copy(Path(f"{path}/{fd}"), f"{dest}/{fd}")
                     except FileExistsError:
+                        pass
+                    except shutil.SameFileError:
                         pass
                 except FileExistsError:
                     pass
@@ -217,23 +620,16 @@ class Modi:
                         pass
             else:
                 pass
-    def install_local(self, *args):
-        packages = []
-        for arg in args:
-            packages.append(arg[0])
-        
-        inst_args = ["local"]
-        for pkg in packages:
-            inst_args.append(pkg)
-        self.install(inst_args)
+        if(return_deps):
+            return dependencies, packages
     
-    def fmt_style(self, text, style):
+    def __fmt_style(self, text, style):
         if(self.termtype == "rich"):
-            return f"[{color}]{text}[/{color}]"
+            return f"[{style}]{text}[/{style}]"
         else:
             return text
-
-    def fmt_code(self, text, lang="modi"):
+    
+    def __fmt_code(self, text, lang="modi"):
         cmd_list = text.split(" ")
         fmt_string = ""
         i = 0
@@ -258,124 +654,9 @@ class Modi:
             i += 1
         return f"[on grey15]{fmt_string}[/on grey15]"
 
-    def install(self, *args):
-        self.total_deps = 0
-        self.packages = []
-        if(len(args) == 0):
-            return 1
-        elif(isinstance(args, str)):
-            args = list(args)
-        elif(isinstance(args, tuple)):
-            args = args[0]
-        else:
-            pass
-        local = False
-        cwd = ""
-        self.packages = []
-        if args[0] == "local":
-            local = True
-            cwd = str(Path(os.getcwd()))
-            if(len(args) > 1):
-                self.packages = args[1:]
-            else:
-                return 1
-        else:
-            cwd = str(Path(self.config["cache"]["path"]))
-            self.packages = args
-        self.prefix = cwd
 
-        setup_py_queue = []
-        pkg_count = len(self.packages)
-        self.total_deps = 0
-        start_time = time.perf_counter()
 
-        global termtype
-        if(termtype == "rich"):
-            count = 0
-            for pkg in rich.progress.track(self.packages, description="    Downloading & Building...", transient=True):
-
-                dep_count = 0
-                mode = "PIP"
-                verb = "Installing"
-                if(local):
-                    verb = "Downloading"
-                if(pkg[0] == "@"):
-                    mode = "SETUPTOOLS"
-                    pkg = pkg[1:]
-
-                if(mode == "PIP"):
-                    self.console.log(f"{verb} package '{pkg}' with PIP", mtype="message")
-                    res = self.install_pip(pkg)
-                    count += 1
-                    dep_count = len(glob.glob(str(Path(f"{self.prefix}/{self.site_prefix}/*[!info]")))) - count - self.total_deps
-                    self.total_deps += dep_count
-                    if(res == 0):
-                        if(self.prefix == str(Path(os.getcwd()))):
-                            self.console.log(f"Downloaded package '{pkg}' and {str(dep_count)} dependencies", mtype="completion")    
-                        else:
-                            self.console.log(f"Installed package '{pkg}' and {str(dep_count)} dependencies", mtype="completion")
-                    else:
-                        setup_py_queue.append(pkg)
-
-                else:
-                    self.console.log("Using legacy setuptools mode, dependencies will have to be installed manually", mtype="warning")
-                    self.console.log(f"{verb} package '{pkg}' with setuptools", mtype="message")
-                    res = self.install_setuptools(pkg)
-                    if(res == 1):
-                        self.console.log("Error: failed to install package " + pkg, mtype="error")
-                    else:
-                        if(local):
-                            self.console.log(f"Downloaded and built package '{pkg}'", mtype="message")
-                        else:
-                            self.console.log(f"Installed package '{pkg}'", mtype="message")
-
-        else:
-            for pkg in self.packages:
-                mode = "PIP"
-                if(pkg[0] == "@"):
-                    mode = "SETUPTOOLS"
-                    pkg = pkg[1:]
-                self.console.log(f"Installing package {pkg}", mtype="message")
-                if(mode == "PIP"):
-                    res = self.install_pip(pkg)
-                    if(res == 1):
-                        setup_py_queue.append(pkg)
-                else:
-                    res = self.install_setuptools(pkg)
-                    if(res == 1):
-                        self.console.log("Error: failed to install package " + pkg, mtype="error")
-                    else:
-                        self.console.log(f"Installed package {pkg}", mtype="message")
-        if(local):
-            self.copy_local(str(Path(f"{os.getcwd()}/{self.site_prefix}")), "./")
-            shutil.rmtree(Path("./lib"))
-            try:
-                shutil.rmtree(Path("./scripts"))
-            except:
-                pass
-            try:
-                shutil.rmtree(Path("./bin"))
-            except:
-                pass
-        finish_time = time.perf_counter()
-        total_time = str(round(finish_time - start_time, 1))
-        pkg_count = str(pkg_count)
-        keyword = "to Modi cache"
-        package_desc = "packages"
-        dep_desc = "dependencies"
-        if(local):
-            keyword = f"locally, to {self.prefix}"
-        if(pkg_count == "1"):
-            package_desc = "package"
-        if(self.total_deps == 1):
-            dep_desc = "dependency"
-        elif(self.total_deps == 0):
-            dep_desc = "dependencies"
-            self.total_deps = "no"
-
-        self.console.log(f"Installed {pkg_count} {package_desc} and {self.total_deps} {dep_desc} {keyword} in {total_time} seconds", mtype="completion") 
-
-    def install_pip(self, pkg):
+    def __install_pip(self, pkg):
         current_env = os.environ.copy()
         current_env["PYTHONPATH"] = str(Path(self.prefix) / Path(self.site_prefix))
         if(os.name != "posix"):
@@ -388,8 +669,8 @@ class Modi:
         else:
 
             return 0
-
-    def install_setuptools(self, pkg):
+    
+    def __install_setuptools(self, pkg):
         if(not os.path.exists(Path(f"{self.prefix}{self.site_prefix}"))):
             path = Path(f"{self.prefix}{self.site_prefix}")
             path.mkdir(parents=True)
@@ -434,50 +715,7 @@ class Modi:
         else:
             return 1
     
-    def remove(self, *args):
-        local = False
-        self.packages = []
-        args = args[0]
-        self.console.log("Removing packages", mtype="warning")
-        start_time = time.perf_counter()
-        if(args[0] == "local"):
-            if(len(args) >= 2):
-                if(args[1] == "all"):
-                    if not self.console.prompt_bool(f"Warning: this is a potentially destructive action.\nRunning {self.fmt_code('modi.py remove local all')} will delete all subdirs in this project. Continue?"):
-                            return 1
-                    for filename in os.listdir(Path("./")):
-                        if "." in filename:
-                            if(filename.split(".")[len(filename.split(".")) - 1] != "py" and "modi" not in filename):
-                                try:
-                                    os.remove(Path(f"./{filename}"))
-                                except PermissionError:
-                                    pass
-                                except IsADirectoryError:
-                                    pass
-                        else:
-                            try:
-                                shutil.rmtree(Path(f"./{filename}"))
-                            except:
-                                pass
-                    return 0
-            self.packages = args[1:]
-            local = True
-            self.prefix = os.getcwd()
-        else:
-            self.packages = args
-            self.prefix = self.config["cache"]["path"]
-        pkg_count = len(self.packages)
-        for pkg in self.packages:
-            for fd in os.listdir(Path(f"{self.prefix}")):
-                if pkg in fd:
-                    shutil.rmtree(Path(f"{self.prefix}/{fd}"))
-            if(local):
-                for fd in os.listdir(Path(f"{self.prefix}/")):
-                    if pkg in fd:
-                        shutil.rmtree(Path(f"{self.prefix}/{fd}"))
-        end_time = time.perf_counter()
-        total_time = str(round(end_time - start_time, 1))
-        self.console.log(f"Removed {str(pkg_count)} packages in {total_time} seconds", mtype="completion")
+
 
 if __name__ == "__main__":
     modi_instance = Modi(args=sys.argv[1:], mode="interactive")
