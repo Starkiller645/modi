@@ -34,6 +34,12 @@ try:
 except ImportError:
     termtype = "plain"
 
+def check_IDLE():
+    return("idlelib" in sys.modules)
+
+if check_IDLE():
+    termtype = "plain"
+
 class Output:
     def __init__(self, termtype, loudness):
         if(termtype == "rich"):
@@ -41,6 +47,7 @@ class Output:
         else:
             self.termtype = 'plain'
         self.loudness = loudness
+        self.project = ""
 
     def set_loudness(self, loudness):
         self.loudness = loudness
@@ -126,7 +133,36 @@ class Output:
             else:
                 choice = Prompt.ask(f"    {text}", choices=choices)
             return choice
-    
+
+    def shell_prompt(self):
+        if(self.termtype == "plain"):
+            if(self.project == ""):
+                return input("    [MODI shell] > ").split(" ")
+            else:
+                return input(f"    [MODI shell in '{self.project}'] > ").split(" ")
+        else:
+            from rich.prompt import Prompt
+            prompt_string = ""
+            if(self.project == ""):
+                prompt_string = f"    [[bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2] shell[/bold]] > "
+            else:
+                prompt_string = f"    [[bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2] shell[/bold] in [bold orchid1]{self.project}[/bold orchid1]]> "
+            return Prompt.ask(prompt_string).split(" ")
+
+class Config:
+    def __init__(self, config_file):
+        self.config_file = config_file
+        try:
+            open(self.config_file, "r")
+        except FileNotFoundError:
+            with open(self.config_file, "w") as file:
+                file.write("{}")
+        with open(self.config_file, "r") as file:
+            self.obj = json.loads(file.read())
+
+    def write(self):
+        with open(self.config_file, "w") as file:
+            file.write(json.dumps(self.obj, indent=4, sort_keys=True))
 
 
 def clear(self): 
@@ -142,17 +178,16 @@ class Modi:
         self.console = Output(termtype, loudness)
         self.termtype = termtype
         try:
-            with open(f"{self.env_home}/.modi.json", "r") as conf:
-                self.config = json.loads(conf.read())
+            file = open(f"{self.env_home}/.modi.json", "r")
+            file.close()
         except:
             self.console.log("Config file not found, bootstrapping...", mtype="warning")
-            with open(Path(f"{self.env_home}/.modi.json", "w")) as conf:
+            with open(Path(f"{self.env_home}/.modi.json"), "w") as conf:
                 filepath = Path(f"{self.env_home}/.modi_cache/")
-                os.mkdir(Path(f"{self.env_home}/.modi_cache/"))
-                json_conf = {"cache": {"path": filepath}}
+                os.makedirs(Path(f"{self.env_home}/.modi_cache/"), exist_ok=True)
+                json_conf = {"cache": {"path": str(filepath)}, "projects": {}}
                 conf.write(json.dumps(json_conf))
-            with open(Path(f"{self.env_home}/.modi.json", "r")) as conf:
-                self.config = json.loads(conf.read())
+        self.config = Config(Path(f"{self.env_home}/.modi.json"))
         self.site_prefix = ""
         if(os.name != "posix"):
             self.windows = True
@@ -165,14 +200,147 @@ class Modi:
            pass 
         elif(mode == "interactive"): 
             if(self.termtype == "rich"):
-                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.3")
+                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.4")
             else:
                 print("    Starting MODI v0.1")
             self.parseargs(args)
+        elif(mode == "shell"):
+            if(self.termtype == "rich"):
+                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.4")
+            else:
+                print("    Starting MODI v0.1")
+            self.shell()
+        
 
     # PUBLIC methods, can be called from outside of class
     # | | |
     # v v v
+
+    def cd(self, directory):
+        os.chdir(Path(directory))
+
+    def ls(self):
+        if(self.console.project == ""):
+            self.console.log("==== DIRECTORY LISTING ====", mtype="info")
+            self.console.log(f"CWD: {os.getcwd()}", mtype="info")
+        else:
+            self.console.log("==== PROJECT LISTING ====", mtype="info")
+            self.console.log(f"Project: {self.console.project}", mtype="info")
+            self.console.log(f"In: {os.getcwd()}", mtype="info")
+        for file in os.listdir(Path(os.getcwd())):
+            self.console.log(file, mtype="info")
+
+    def project(self, args):
+        """Create, delete or bootstrap a MODI project
+        """
+        project_dir = ""
+        self.console.log(args)
+        if args[0] == "create" or args[0] == "bootstrap":
+            self.console.log("Creating project...")
+            project_name = ""
+            project_ident = ""
+            project_dir = ""
+            if(len(args) == 1 or args[0] == "bootstrap"):
+                project_name = self.console.prompt(f"{self.__fmt_style('Enter a project name', 'bold gold1')}")
+                project_dir = str(Path(os.getcwd()))
+            elif(len(args) == 2):
+                project_name = args[1]
+                project_dir = str(Path(os.getcwd()))
+            else:
+                project_name = args[1]
+                project_dir = str(Path(args[2]))
+            try:
+                os.makedirs(project_dir, exist_ok=True)
+            except:
+                pass
+            project_ident = project_name.replace(" ", "_").lower()
+            self.config.obj["projects"][project_ident] = {"name": project_name, "directory": project_dir, "dependencies": []}
+            self.config.write()
+
+            proj_type = self.console.prompt(f"{self.__fmt_style('Enter a project type', 'bold gold1')}", choices=["module", "package"])
+
+            proj_file = Config(Path(f"{project_dir}/modi.meta.json"))
+            proj_file.obj["pkg_name"] = project_ident
+            proj_file.obj["pkg_fullname"] = project_name
+            proj_file.obj["dependencies"] = []
+            proj_file.obj["packages"] = []
+            proj_file.obj["pkg_type"] = proj_type
+            proj_file.write()
+
+            style_string  = self.__fmt_style(project_name, 'bold light_sky_blue1')
+            self.console.log(f"Created project {style_string} in {project_dir}", mtype="completion")
+            
+            
+        elif args[0] == "delete":
+            if not self.console.prompt_bool("This operation cannot be undone. Continue?"):
+                return 1
+            if(len(args) < 2):
+                return 1
+            proj_name = args[1]
+            if proj_name not in self.config.obj["projects"]:
+                self.console.log(f"Error: could not find project '{proj_name}'")
+                return 1
+            config_backup = self.config.obj["projects"][proj_name]
+            shutil.rmtree(config_backup["directory"])
+            del self.config.obj["projects"][proj_name]
+            style_string  = self.__fmt_style(proj_name, 'bold orchid1')
+            self.console.log(f"Deleted project {style_string}", mtype="completion")
+            
+        if args[0] == "bootstrap":
+            print("bootstrapping")
+            pkg_name = ""
+            pwd = os.getcwd()
+            self.console.log(args)
+            if(project_dir != ""):
+                self.cd(Path(project_dir))
+            if(len(args) < 3):
+                return 1
+            if(args[1] == "from"):
+                if(self.termtype == "rich"):
+                    pkg_name = self.console.prompt("[bold gold1]Enter a package name[/bold gold1]").replace(" ", "-")
+                else:
+                    pkg_name = self.console.prompt("    Enter a package name").replace(" ", "-")
+            else:
+                pkg_name = args[1]
+            if(args[1] != "from" and len(args) < 4):
+                return 1
+            pkg_file = args[len(args) - 1]
+            res = self.bootstrap(pkg_file)
+            self.cd(Path(pwd))
+            return res
+            
+        elif args[0] == "goto":
+            if(len(args) < 2):
+                return 1
+            pkg_name = args[1]
+            try:
+                path = Path(self.config.obj["projects"][pkg_name]["directory"])
+            except:
+                return 1
+            try:
+                self.cd(path)
+            except FileNotFoundError:
+                self.console.log(f"Error: broken project; could not change directory to {path}.", mtype="error")
+                return 1
+            self.console.project = pkg_name
+            return 0
+
+    def shell(self):
+        """Wrap Modi.parseargs to provide an interface where a CLI is unavailable (such as IDLE)
+
+        Returns:
+            0: Always
+        """
+        cmdline = ""
+        try:
+            while True:
+                cmdline = self.console.shell_prompt()
+                if cmdline in ["exit", "quit", "bye"]:
+                    return 0
+                self.parseargs(cmdline, shell=True)
+        except KeyboardInterrupt:
+            print()
+            self.console.log("Bye!", mtype="completion")
 
     def install_local(self, args, return_deps=False):
         """Wrap Modi.install to install local packages more easily
@@ -197,7 +365,7 @@ class Modi:
         """Install a package available from PyPi, either to the global cache or to the CWD
 
         Args:
-            *args: a list of packages to install from PyPi, optionally with "local" as the first parameter which indicates that local mode shoudl be used (variadic)
+            *args: a list of packages to install from PyPi, optionally with "local" as the first parameter which indicates that local mode should be used (variadic)
 
         Returns:
             1: if the method failed to install any one of the requested packages
@@ -236,7 +404,7 @@ class Modi:
             else:
                 return 1
         else:
-            cwd = str(Path(self.config["cache"]["path"]))
+            cwd = str(Path(self.config.obj["cache"]["path"]))
             self.packages = args
         self.prefix = cwd
 
@@ -392,7 +560,7 @@ class Modi:
             self.console.log(f"  > {self.__fmt_code('modi.py help [cmd]')}: Shows detailed help for a specific command.", mtype="info")
 
 
-    def parseargs(self, *args):
+    def parseargs(self, *args, shell=False):
         args = args[0]
         if(len(args) <= 0):
             self.console.log("Error: no valid operation specified", mtype="error")
@@ -414,6 +582,14 @@ class Modi:
             self.build(args[1:])
         elif(args[0] == "bootstrap" or args[0] == "setup"):
             self.bootstrap(args[1])
+        elif(args[0] == "shell"):
+            self.shell()
+        elif(args[0] == "project"):
+            self.project(args[1:])
+        elif((args[0] == "ls" or args[0] == "dir") and shell):
+            self.ls()
+        elif((args[0] == "cd") and shell):
+            self.cd(args[1])
         else:
             self.console.log("Error: no valid operation specified", mtype="error")
             return 1
@@ -479,7 +655,7 @@ class Modi:
             if(self.termtype == "rich"):
                 pkg_name = self.console.prompt("[bold gold1]Enter a package name[/bold gold1]").replace(" ", "-")
             else:
-                pkg_name = self.console.prompt("    Enter a package name")#.replace(" ", "-")
+                pkg_name = self.console.prompt("    Enter a package name").replace(" ", "-")
         style_string = self.__fmt_style(f"{pkg_name}", 'bold light_sky_blue1')
         self.console.log(f"Building package {style_string}")
         start_time = time.perf_counter()
@@ -550,6 +726,7 @@ class Modi:
         return 0
 
     def bootstrap(self, package_name):
+        print(package_name)
         """Bootstrap a project from a .zip, .tar.gz or (ideally) .modi.pkg file to the CWD
         
         Args:
@@ -570,6 +747,7 @@ class Modi:
         correct_file = ""
         current_dir = os.listdir(Path("./"))
         current_dir.remove("modi.py")
+        current_dir.remove("modi.meta.json")
         for file in valid_files:
             current_dir.remove(file)
         if(len(valid_files) > 1):
@@ -681,7 +859,7 @@ class Modi:
             self.prefix = os.getcwd()
         else:
             self.packages = args
-            self.prefix = self.config["cache"]["path"]
+            self.prefix = self.config.obj["cache"]["path"]
         pkg_count = len(self.packages)
         for pkg in self.packages:
             for fd in os.listdir(Path(f"{self.prefix}")):
@@ -895,4 +1073,7 @@ class Modi:
 
 
 if __name__ == "__main__":
-    modi_instance = Modi(args=sys.argv[1:], mode="interactive")
+    if check_IDLE():
+        modi_instance = Modi(args=sys.argv[1:], mode="shell")
+    else:
+        modi_instance = Modi(args=sys.argv[1:], mode="interactive")
