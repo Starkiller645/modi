@@ -239,15 +239,18 @@ class Modi:
             project_name = ""
             project_ident = ""
             project_dir = ""
-            if(len(args) == 1 or args[0] == "bootstrap"):
+            if(len(args) == 1 or (args[0] == "bootstrap" and args[1] == "from")):
                 project_name = self.console.prompt(f"{self.__fmt_style('Enter a project name', 'bold gold1')}")
                 project_dir = str(Path(os.getcwd()))
             elif(len(args) == 2):
                 project_name = args[1]
                 project_dir = str(Path(os.getcwd()))
-            else:
+            elif(args[2] != "from"):
                 project_name = args[1]
                 project_dir = str(Path(args[2]))
+            else:
+                project_name = args[1]
+                project_dir = str(Path(os.getcwd()))
             try:
                 os.makedirs(project_dir, exist_ok=True)
             except:
@@ -262,7 +265,8 @@ class Modi:
             choice = ""
             while choice != "@fi":
                 choice = self.console.prompt(f"{self.__fmt_style(' > ', 'bold light_sky_blue1')}")
-                desc.append(choice)
+                if(choice != "@fi"):
+                    desc.append(choice)
             final_desc = ""
             for line in desc:
                 final_desc += (line + "\n")
@@ -275,7 +279,7 @@ class Modi:
             proj_file.obj["pkg_type"] = proj_type
             proj_file.obj["description"] = final_desc
             proj_file.write()
-            with open("requirements.txt", "w") as reqs:
+            with open(Path(f"{project_dir}/requirements.txt"), "w") as reqs:
                 reqs.write("")
 
             style_string  = self.__fmt_style(project_name, 'bold light_sky_blue1')
@@ -298,20 +302,21 @@ class Modi:
             self.console.log(f"Deleted project {style_string}", mtype="completion")
 
         elif args[0] == "show":
-            proj_data = json.loads("modi.meta.json")
+            proj_data = {}
+            with open("modi.meta.json", "r") as meta_file:
+                proj_data = json.loads(meta_file.read())
             fmt_string = self.__fmt_style(proj_data["pkg_fullname"], 'bold orchid1')
             self.console.log(f"Project data for {fmt_string}:", mtype="info")
             self.console.log(f"Dependencies: {proj_data['dependencies']}", mtype="info")
             self.console.log(f"Description:", mtype="info")
             for line in proj_data["description"].split("\n"):
                 self.console.log(f"{self.__fmt_style(' > ', 'bold light_sky_blue1')}" + line, mtype="info")
-            if f"{proj_data['pkg_ident'].modi.pkg}" in os.listdir():
-                fmt_string = self.__fmt_style(f"{proj_data['pkg_ident'].modi.pkg}", 'bold orchid1')
-                self.console.log(f"From: {fmt_string}")
+            if f"{proj_data['pkg_name']}.modi.pkg" in os.listdir():
+                fmt_string = self.__fmt_style(f"{proj_data['pkg_name']}.modi.pkg", 'bold orchid1')
+                self.console.log(f"From: {fmt_string}", mtype="info")
             return 0
             
         if args[0] == "bootstrap":
-            print("bootstrapping")
             pkg_name = ""
             pwd = os.getcwd()
             if(project_dir != ""):
@@ -319,6 +324,7 @@ class Modi:
             if(len(args) < 3):
                 return 1
             if(args[1] == "from"):
+                pkg_name = args[2]
                 if(self.termtype == "rich"):
                     pkg_name = self.console.prompt("[bold gold1]Enter a package name[/bold gold1]").replace(" ", "-")
                 else:
@@ -606,6 +612,10 @@ class Modi:
                     req_pkgs.append(pkg)
                 if pkg not in proj_conf["dependencies"]:
                     proj_conf["dependencies"].append(pkg)
+            with open("modi.meta.json", "w") as conf:
+                conf.write(json.dumps(proj_conf, indent=4))
+            with open("requirements.txt", "w") as reqs:
+                reqs.writelines(req_pkgs)
         except:
             self.console.log("Error: Project files not found. Run 'modi.py project create' to create a new project in this directory", mtype="error")
 
@@ -688,7 +698,7 @@ class Modi:
             except FileNotFoundError:
                 self.console.log("Error: 'auto' mode selected but could not find ./requirements.txt", mtype="error")
                 return 1
-            final_deps, final_pkgs = self.install_local(packages, return_deps=True)
+            final_deps, final_pkgs = self.install_local(packages, return_deps=True, no_projects=False)
 
         current_working_dir = os.listdir(Path("./"))
         final_dirs = []
