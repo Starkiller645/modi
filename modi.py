@@ -234,7 +234,6 @@ class Modi:
         """Create, delete or bootstrap a MODI project
         """
         project_dir = ""
-        self.console.log(args)
         if args[0] == "create" or args[0] == "bootstrap":
             self.console.log("Creating project...")
             project_name = ""
@@ -258,6 +257,15 @@ class Modi:
             self.config.write()
 
             proj_type = self.console.prompt(f"{self.__fmt_style('Enter a project type', 'bold gold1')}", choices=["module", "package"])
+            self.console.log(f"Create a description for your project (type '@fi' to finish):")
+            desc = []
+            choice = ""
+            while choice != "@fi":
+                choice = self.console.prompt(f"{self.__fmt_style(' > ', 'bold light_sky_blue1')}")
+                desc.append(choice)
+            final_desc = ""
+            for line in desc:
+                final_desc += (line + "\n")
 
             proj_file = Config(Path(f"{project_dir}/modi.meta.json"))
             proj_file.obj["pkg_name"] = project_ident
@@ -265,7 +273,10 @@ class Modi:
             proj_file.obj["dependencies"] = []
             proj_file.obj["packages"] = []
             proj_file.obj["pkg_type"] = proj_type
+            proj_file.obj["description"] = final_desc
             proj_file.write()
+            with open("requirements.txt", "w") as reqs:
+                reqs.write("")
 
             style_string  = self.__fmt_style(project_name, 'bold light_sky_blue1')
             self.console.log(f"Created project {style_string} in {project_dir}", mtype="completion")
@@ -285,12 +296,24 @@ class Modi:
             del self.config.obj["projects"][proj_name]
             style_string  = self.__fmt_style(proj_name, 'bold orchid1')
             self.console.log(f"Deleted project {style_string}", mtype="completion")
+
+        elif args[0] == "show":
+            proj_data = json.loads("modi.meta.json")
+            fmt_string = self.__fmt_style(proj_data["pkg_fullname"], 'bold orchid1')
+            self.console.log(f"Project data for {fmt_string}:", mtype="info")
+            self.console.log(f"Dependencies: {proj_data['dependencies']}", mtype="info")
+            self.console.log(f"Description:", mtype="info")
+            for line in proj_data["description"].split("\n"):
+                self.console.log(f"{self.__fmt_style(' > ', 'bold light_sky_blue1')}" + line, mtype="info")
+            if f"{proj_data['pkg_ident'].modi.pkg}" in os.listdir():
+                fmt_string = self.__fmt_style(f"{proj_data['pkg_ident'].modi.pkg}", 'bold orchid1')
+                self.console.log(f"From: {fmt_string}")
+            return 0
             
         if args[0] == "bootstrap":
             print("bootstrapping")
             pkg_name = ""
             pwd = os.getcwd()
-            self.console.log(args)
             if(project_dir != ""):
                 self.cd(Path(project_dir))
             if(len(args) < 3):
@@ -335,14 +358,15 @@ class Modi:
         try:
             while True:
                 cmdline = self.console.shell_prompt()
-                if cmdline in ["exit", "quit", "bye"]:
+                if cmdline[0] in ["exit", "quit", "bye"]:
+                    self.console.log("Bye!", mtype="completion")
                     return 0
                 self.parseargs(cmdline, shell=True)
         except KeyboardInterrupt:
             print()
             self.console.log("Bye!", mtype="completion")
 
-    def install_local(self, args, return_deps=False):
+    def install_local(self, args, return_deps=False, no_projects=True):
         """Wrap Modi.install to install local packages more easily
         
         Args:
@@ -359,9 +383,9 @@ class Modi:
 
         for pkg in packages:
             inst_args.append(pkg)
-        return self.install(inst_args, return_deps)
+        return self.install(inst_args, return_deps, no_projects=no_projects)
 
-    def install(self, args, return_deps=False):
+    def install(self, args, return_deps=False, no_projects=True):
         """Install a package available from PyPi, either to the global cache or to the CWD
 
         Args:
@@ -374,6 +398,9 @@ class Modi:
 
         self.total_deps = 0
         self.packages = []
+        if("modi.meta.json" in os.listdir() and no_projects):
+            self.console.log(f"Error: You are currently working in a Modi project. {self.__fmt_code('modi.py add <packages>')} must be used to install packages into a project", mtype="error")
+            return 1
         if(len(args) == 0):
             return 1
         elif(isinstance(args, str)):
@@ -468,8 +495,6 @@ class Modi:
                         self.console.log(f"Downloaded and built package '{pkg}'", mtype="message")
                     else:
                         self.console.log(f"Installed package '{pkg}'", mtype="message")
-
-
         else:
             for pkg in self.packages:
                 mode = "PIP"
@@ -559,6 +584,32 @@ class Modi:
             self.console.log(f"- {self.__fmt_code('modi.py help')}        : Shows the short help view for MODI.", mtype="info")
             self.console.log(f"  > {self.__fmt_code('modi.py help [cmd]')}: Shows detailed help for a specific command.", mtype="info")
 
+    def add(self, pkgs):
+        """Wraps Modi.install to also add dependencies to modi.meta.json and requirements.txt
+
+        Args:
+            pkgs (list): A list of packages to add
+        Returns:
+            The result of Modi.install(pkgs)
+        """
+        req_pkgs = []
+        proj_conf = {}
+        try:
+            with open("requirements.txt", "r") as reqs:
+                req_pkgs = reqs.readlines()
+            with open("modi.meta.json", "r") as conf:
+                proj_conf = json.loads(conf.read())
+            for pkg in pkgs:
+                if pkg in req_pkgs and pkg in proj_conf["dependencies"]:
+                    pass
+                if pkg not in req_pkgs:
+                    req_pkgs.append(pkg)
+                if pkg not in proj_conf["dependencies"]:
+                    proj_conf["dependencies"].append(pkg)
+        except:
+            self.console.log("Error: Project files not found. Run 'modi.py project create' to create a new project in this directory", mtype="error")
+
+        self.install_local(req_pkgs, no_projects=False)
 
     def parseargs(self, *args, shell=False):
         args = args[0]
@@ -586,6 +637,8 @@ class Modi:
             self.shell()
         elif(args[0] == "project"):
             self.project(args[1:])
+        elif(args[0] == "add"):
+            self.add(args[1:])
         elif((args[0] == "ls" or args[0] == "dir") and shell):
             self.ls()
         elif((args[0] == "cd") and shell):
@@ -698,10 +751,14 @@ class Modi:
             self.console.log(f"Mode 'modi' selected, building compressed MODI package...")
             import tarfile
             os.mkdir(Path(f"./{pkg_name}"))
-            meta_obj = {"pkg_name": pkg_name, "dependencies": [*final_deps], "packages": [*final_pkgs]}
+            meta_obj = {"pkg_name": pkg_name, "dependencies": [*final_pkgs]}
             json_obj = json.dumps(meta_obj, sort_keys=True, indent=4)
-            with open(Path(f"./{pkg_name}/modi.meta.json"), "w") as meta_inf:
-                meta_inf.write(json_obj)
+            if(not os.path.exists(Path("./modi.meta.json"))):
+                with open(Path(f"./{pkg_name}/modi.meta.json"), "w") as meta_inf:
+                    meta_inf.write(json_obj)
+            else:
+                shutil.copy("modi.meta.json", Path(f"./{pkg_name}/modi.meta.json"))
+                self.console.log("Copied existing project config to tarfile")
             for file in final_dirs:
                 try:
                     shutil.copy(Path(f"./{file}"), Path(f"./{pkg_name}/{file}"))
@@ -726,7 +783,6 @@ class Modi:
         return 0
 
     def bootstrap(self, package_name):
-        print(package_name)
         """Bootstrap a project from a .zip, .tar.gz or (ideally) .modi.pkg file to the CWD
         
         Args:
@@ -746,8 +802,14 @@ class Modi:
             return 1
         correct_file = ""
         current_dir = os.listdir(Path("./"))
-        current_dir.remove("modi.py")
-        current_dir.remove("modi.meta.json")
+        try:
+            current_dir.remove("modi.py")
+        except:
+            pass
+        try:
+            current_dir.remove("modi.meta.json")
+        except:
+            pass
         for file in valid_files:
             current_dir.remove(file)
         if(len(valid_files) > 1):
@@ -756,7 +818,8 @@ class Modi:
             correct_file = valid_files[0]
 
         if(len(current_dir) > 0):
-            self.console.log("The current directory contains files other than modi.py and packages. If you choose to continue, they will be deleted.", mtype="warning")
+            self.console.log("The current directory contains files other than modi.py and packages.", mtype="warning") 
+            self.console.log("If you choose to continue, they will be deleted.", mtype="warning")
             choice = self.console.prompt_bool("    Continue?")
             if(not choice):
                 return 1
@@ -802,7 +865,6 @@ class Modi:
             try:
                 with open(Path("./modi.meta.json")) as meta_file:
                     file_meta = json.loads(meta_file.read())
-                os.remove(Path("./modi.meta.json"))
             except:
                 self.console.log("Invalid or missing meta-information file, cannot write requirements.txt", mtype="warning")
 
