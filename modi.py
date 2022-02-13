@@ -114,6 +114,10 @@ class Output:
             return choice
         else:
             from rich.prompt import IntPrompt
+            i = 1
+            for choice in choices:
+                rich.print(f"    [{i}.] [bold orchid1]{choice}[/bold orchid1]")
+                i += 1
             return_value = IntPrompt(choices=choices).ask(text)
             return return_value
     
@@ -823,7 +827,8 @@ class Modi:
         for file in valid_files:
             current_dir.remove(file)
         if(len(valid_files) > 1):
-            correct_file = valid_files[self.console.prompt_selection(f"    There were multiple valid files to install. Please select {self.__fmt_style('one', 'bold')}", valid_files) - 1]
+            self.console.log("There were multiple valid files to install", mtype="warning")
+            correct_file = valid_files[self.console.prompt_selection(f"    Please select {self.__fmt_style('one', 'bold')}", valid_files) - 1]
         else:
             correct_file = valid_files[0]
 
