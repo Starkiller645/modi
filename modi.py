@@ -275,6 +275,14 @@ class Modi:
             for line in desc:
                 final_desc += (line + "\n")
 
+            deps = []
+
+            if(os.path.exists(Path(f"{project_dir}/requirements.txt}"))):
+                self.console.log("Pulling dependencies from requirements.txt")
+                with open(Path(f"{project_dir}/requirements.txt}"), "r") as dep_file:
+                    for line in dep_file.readlines():
+                        deps.append(line)
+
             proj_file = Config(Path(f"{project_dir}/modi.meta.json"))
             proj_file.obj["pkg_name"] = project_ident
             proj_file.obj["pkg_fullname"] = project_name
@@ -390,10 +398,12 @@ class Modi:
         for arg in args:
             packages.append(arg)
         inst_args = ["local"]
+        self.console.log(args)
+        self.console.log(return_deps)
 
         for pkg in packages:
             inst_args.append(pkg)
-        return self.install(inst_args, return_deps, no_projects=no_projects)
+        return self.install(inst_args, return_deps=return_deps, no_projects=no_projects)
 
     def install(self, args, return_deps=False, no_projects=True):
         """Install a package available from PyPi, either to the global cache or to the CWD
@@ -623,7 +633,7 @@ class Modi:
         except:
             self.console.log("Error: Project files not found. Run 'modi.py project create' to create a new project in this directory", mtype="error")
 
-        self.install_local(req_pkgs, no_projects=False)
+        self.install_local(req_pkgs, return_deps=False, no_projects=False)
 
     def parseargs(self, *args, shell=False):
         args = args[0]
@@ -702,7 +712,11 @@ class Modi:
             except FileNotFoundError:
                 self.console.log("Error: 'auto' mode selected but could not find ./requirements.txt", mtype="error")
                 return 1
-            final_deps, final_pkgs = self.install_local(packages, return_deps=True, no_projects=False)
+            try:
+                final_deps, final_pkgs = self.install_local(packages, return_deps=True, no_projects=False)
+            except TypeError:
+                self.console.log("Error: 'auto' mode selected, but ./requirements.txt didn't contain any valid packages", mtype="error")
+                return 1
 
         current_working_dir = os.listdir(Path("./"))
         final_dirs = []
