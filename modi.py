@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Modi: a local package installer for python3 (and output helper class).
+"""A local package installer for python3 (and output helper class).
 
 Modi is a local package installer that can install PyPi and setuptools packages to
 either a global cache or directly into the CWD, for easy import and packaging. It can
 also build egg files and sdists that it can install at a later date, using modi.py build
 
-    Typical usage example:
+Typical usage example:
 
     import modi
     modi_instance = modi.Modi()
     modi_instance.install(["asciimatics"]) # installs to global cache
     modi_instance.install(["rich", "PyQt5", "colorama"]) # installs multiple pkgs to CWD
     modi_instance.build("freeze") # builds a zip-file from installed packages and python files
+
 """
 
 import json
@@ -221,9 +222,16 @@ class Modi:
     # v v v
 
     def cd(self, directory):
+        """Set the current working directory of the Python process
+
+        Args:
+            directory (str): the directory to switch to (can be in any format supported by pathlib)
+        """
         os.chdir(Path(directory))
 
     def ls(self):
+        """Print the contents of the CWD to stdout
+        """
         if(self.console.project == ""):
             self.console.log("==== DIRECTORY LISTING ====", mtype="info")
             self.console.log(f"CWD: {os.getcwd()}", mtype="info")
@@ -236,6 +244,13 @@ class Modi:
 
     def project(self, args):
         """Create, delete or bootstrap a MODI project
+        
+        Args:
+            args (list): A list of commands to run. E.G: ["bootstrap", "from", "<pkg>"]
+
+        Returns:
+            1: if there was an error in project creation.
+            0: if the project was succesfully created.
         """
         project_dir = ""
         if args[0] == "create" or args[0] == "bootstrap":
@@ -296,27 +311,37 @@ class Modi:
 
             style_string  = self.__fmt_style(project_name, 'bold light_sky_blue1')
             self.console.log(f"Created project {style_string} in {project_dir}", mtype="completion")
-            
+            return 0
             
         elif args[0] == "delete":
-            if not self.console.prompt_bool("This operation cannot be undone. Continue?"):
-                return 1
             if(len(args) < 2):
                 return 1
-            proj_name = args[1]
-            if proj_name not in self.config.obj["projects"]:
-                self.console.log(f"Error: could not find project '{proj_name}'")
-                return 1
-            config_backup = self.config.obj["projects"][proj_name]
-            shutil.rmtree(config_backup["directory"])
-            del self.config.obj["projects"][proj_name]
-            style_string  = self.__fmt_style(proj_name, 'bold orchid1')
-            self.console.log(f"Deleted project {style_string}", mtype="completion")
+            for proj_name in args[1:]:
+                self.console.log(f"Deleting project {proj_name}")
+                if not self.console.prompt_bool("This operation cannot be undone. Continue?"):
+                    return 1
+                if proj_name not in self.config.obj["projects"]:
+                    self.console.log(f"Error: could not find project '{proj_name}'")
+                    return 1
+                config_backup = self.config.obj["projects"][proj_name]
+                try:
+                    shutil.rmtree(config_backup["directory"])
+                except FileNotFoundError:
+                    self.console.log("Project directory not found, skipping deletion.", mtype="warning")
+                del self.config.obj["projects"][proj_name]
+                self.config.write()
+                style_string  = self.__fmt_style(proj_name, 'bold orchid1')
+                self.console.log(f"Deleted project {style_string}", mtype="completion")
+            return 0
 
         elif args[0] == "show":
             proj_data = {}
-            with open("modi.meta.json", "r") as meta_file:
-                proj_data = json.loads(meta_file.read())
+            try:
+                with open("modi.meta.json", "r") as meta_file:
+                    proj_data = json.loads(meta_file.read())
+            except FileNotFoundError:
+                self.console.log("Error: you are not currently in a valid Modi project", mtype="error")
+                return 1
             fmt_string = self.__fmt_style(proj_data["pkg_fullname"], 'bold orchid1')
             self.console.log(f"Project data for {fmt_string}:", mtype="info")
             self.console.log(f"Dependencies: {proj_data['dependencies']}", mtype="info")
@@ -398,8 +423,6 @@ class Modi:
         for arg in args:
             packages.append(arg)
         inst_args = ["local"]
-        self.console.log(args)
-        self.console.log(return_deps)
 
         for pkg in packages:
             inst_args.append(pkg)
@@ -604,6 +627,44 @@ class Modi:
             self.console.log(f"- {self.__fmt_code('modi.py help')}        : Shows the short help view for MODI.", mtype="info")
             self.console.log(f"  > {self.__fmt_code('modi.py help [cmd]')}: Shows detailed help for a specific command.", mtype="info")
 
+    def logo(self):
+        """Show the Modi logo, as a demonstration for Modi's capabilities
+        """
+        try:
+            import pyfiglet
+            import rich
+        except ImportError:
+            if not self.console.prompt_bool("    PyFiglet and Rich not found. Install?"):
+                return 1
+            if self.install_local(["pyfiglet", "rich"]) == 1:
+                self.console.log("Could not install PyFiglet and Rich, exiting...", mtype="error")
+                return 1
+        import pyfiglet
+        import rich
+        import rich.markup
+        lines_arr = []
+        lbr = pyfiglet.figlet_format("[", font="colossal")
+        m = pyfiglet.figlet_format("M", font="colossal")
+        o = pyfiglet.figlet_format("O", font="colossal")
+        d = pyfiglet.figlet_format("D", font="colossal")
+        i = pyfiglet.figlet_format("I", font="colossal")
+        rbr = pyfiglet.figlet_format("]", font="colossal")
+        height = len(lbr.split("\n"))
+        lbr = lbr.split("\n")
+        m = m.split("\n")
+        o = o.split("\n")
+        d = d.split("\n")
+        i = i.split("\n")
+        rbr = rbr.split("\n")
+        print()
+        for j in range(height):
+            lines_arr.append(f"    [bold white]{lbr[j]}[/][bold] [sky_blue2]{rich.markup.escape(m[j])}[/] [light_sky_blue1]{o[j]}[/] [plum1]{d[j]}[/] [orchid2]{i[j]}[/][/bold] [bold white]{rbr[j]}[/bold white]")
+        for line in lines_arr:
+            rich.print(line)
+        print()
+
+
+
     def add(self, pkgs):
         """Wraps Modi.install to also add dependencies to modi.meta.json and requirements.txt
 
@@ -613,23 +674,27 @@ class Modi:
             The result of Modi.install(pkgs)
         """
         req_pkgs = []
+        current_deps = []
         proj_conf = {}
         try:
             with open("requirements.txt", "r") as reqs:
-                req_pkgs = reqs.readlines()
+                current_deps = reqs.read().split("\n")
             with open("modi.meta.json", "r") as conf:
                 proj_conf = json.loads(conf.read())
             for pkg in pkgs:
-                if pkg in req_pkgs and pkg in proj_conf["dependencies"]:
-                    pass
-                if pkg not in req_pkgs:
+                if pkg in current_deps or pkg in proj_conf["dependencies"]:
+                    self.console.log("Package already in project dependencies list.", mtype="warning")
+                    if self.console.prompt_bool(f"    {self.__fmt_style('Do you want to continue installation?', 'bold gold1')}"):
+                        req_pkgs.append(pkg)
+                if pkg not in current_deps:
                     req_pkgs.append(pkg)
                 if pkg not in proj_conf["dependencies"]:
                     proj_conf["dependencies"].append(pkg)
             with open("modi.meta.json", "w") as conf:
                 conf.write(json.dumps(proj_conf, indent=4))
-            with open("requirements.txt", "w") as reqs:
-                reqs.writelines(req_pkgs)
+            with open("requirements.txt", "a") as reqs:
+                for dep in req_pkgs:
+                    reqs.write(dep)
         except:
             self.console.log("Error: Project files not found. Run 'modi.py project create' to create a new project in this directory", mtype="error")
 
@@ -653,6 +718,8 @@ class Modi:
                 self.help(name=args[1])
         elif(args[0] == "remove"):
             self.remove(args[1:])
+        elif(args[0] == "logo" or args[0] == "demo"):
+            self.logo()
         elif(args[0] == "build"):
             self.build(args[1:])
         elif(args[0] == "bootstrap" or args[0] == "setup"):
