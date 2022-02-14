@@ -205,13 +205,13 @@ class Modi:
            pass 
         elif(mode == "interactive"): 
             if(self.termtype == "rich"):
-                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.4")
+                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.5")
             else:
                 print("    Starting MODI v0.1")
             self.parseargs(args)
         elif(mode == "shell"):
             if(self.termtype == "rich"):
-                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.4")
+                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.5")
             else:
                 print("    Starting MODI v0.1")
             self.shell()
@@ -270,6 +270,15 @@ class Modi:
             else:
                 project_name = args[1]
                 project_dir = str(Path(os.getcwd()))
+
+            if("into" in args):
+                try:
+                   project_dir = str(Path(args[args.index("into") + 1]))
+                except:
+                    self.console.log("Error: 'into' specified but could not find directory.", mtype="error")
+                    return 1
+            self.console.log(project_dir)
+
             try:
                 os.makedirs(project_dir, exist_ok=True)
             except:
@@ -294,38 +303,45 @@ class Modi:
                 self.console.log("Pulling dependencies from requirements.txt")
                 with open(Path(f"{project_dir}/requirements.txt"), "r") as dep_file:
                     for line in dep_file.readlines():
-                        deps.append(line)
+                        deps.append(line.strip())
 
             self.config.obj["projects"][project_ident] = {"name": project_name, "directory": project_dir, "dependencies": [], "description": final_desc}
             self.config.write()
             proj_file = Config(Path(f"{project_dir}/modi.meta.json"))
             proj_file.obj["pkg_name"] = project_ident
             proj_file.obj["pkg_fullname"] = project_name
-            proj_file.obj["dependencies"] = []
-            proj_file.obj["packages"] = []
+            proj_file.obj["dependencies"] = deps
             proj_file.obj["pkg_type"] = proj_type
             proj_file.obj["description"] = final_desc
             proj_file.write()
             with open(Path(f"{project_dir}/requirements.txt"), "w") as reqs:
-                reqs.write("")
+                for dep in deps:
+                    reqs.write(dep + "\n")
 
-            style_string  = self.__fmt_style(project_name, 'bold light_sky_blue1')
+            style_string = self.__fmt_style(project_name, 'bold light_sky_blue1')
             self.console.log(f"Created project {style_string} in {project_dir}", mtype="completion")
-            return 0
+            if("bootstrap" not in args):
+                return 0
         
         elif args[0] == "unlist" or args[0] == "unlink":
             for proj_name in args[1:]:
                 self.console.log(f"Unlisting project {proj_name}")
-                if not self.console.prompt_bool("This operation will not delete any files, but will remove the project from Modi's config. Continue?"):
+                if not self.console.prompt_bool(f"   {self.__fmt_style('This operation will not delete any files, but will remove the project from the local registry. Continue?', 'bold gold1')} "):
                     return 1
                 if proj_name not in self.config.obj["projects"]:
                     self.console.log(f"Error: could not find project '{proj_name}'")
                     return 1
                 config_backup = self.config.obj["projects"][proj_name]
+                try:
+                    os.remove(Path(f"{config_backup['directory']}/modi.meta.json"))
+                except FileNotFoundError:
+                    pass
                 del self.config.obj["projects"][proj_name]
                 self.config.write()
                 style_string  = self.__fmt_style(proj_name, 'bold orchid1')
                 self.console.log(f"Unlisted project {style_string} in {config_backup['directory']}", mtype="completion")
+                if(proj_name == self.console.project):
+                    self.console.project = ""
             return 0
         
         elif args[0] == "list":
@@ -379,8 +395,7 @@ class Modi:
         if args[0] == "bootstrap":
             pkg_name = ""
             pwd = os.getcwd()
-            if(project_dir != ""):
-                self.cd(Path(project_dir))
+
             if(len(args) < 3):
                 return 1
             if(args[1] == "from"):
@@ -393,9 +408,8 @@ class Modi:
                 pkg_name = args[1]
             if(args[1] != "from" and len(args) < 4):
                 return 1
-            pkg_file = args[len(args) - 1]
-            res = self.bootstrap(pkg_file)
-            self.cd(Path(pwd))
+            pkg_file = args[args.index("from") + 1]
+            res = self.bootstrap(pkg_file, cwd=project_dir)
             return res
             
         elif args[0] == "goto":
@@ -443,8 +457,23 @@ class Modi:
             0: if all packages downloaded and installed successfully
         """
         packages = []
+        current_deps = []
         for arg in args:
             packages.append(arg)
+        try:
+            with open(Path("./requirements.txt"), "r") as req_file:
+                current_deps = req_file.readlines()
+                for dep in current_deps:
+                    dep = dep.strip()
+        except FileNotFoundError:
+            pass
+        with open(Path("./requirements.txt"), "w") as req_file:
+            for pkg in packages:
+                if pkg not in current_deps:
+                    current_deps.append(pkg)
+            for dep in current_deps:
+                req_file.write(dep + "\n")
+
         inst_args = ["local"]
 
         for pkg in packages:
@@ -908,7 +937,7 @@ class Modi:
         self.console.log(f"Finished building package {style_string} in {total_time} seconds", mtype="completion")
         return 0
 
-    def bootstrap(self, package_name):
+    def bootstrap(self, package_name, cwd=""):
         """Bootstrap a project from a .zip, .tar.gz or (ideally) .modi.pkg file to the CWD
         
         Args:
@@ -920,14 +949,19 @@ class Modi:
         """
         valid_files = []
         self.console.log(f"Bootstrapping project {package_name}")
-        for file in os.listdir(Path(f"./")):
+        if(cwd == ""):
+            cwd = Path(os.getcwd())
+        self.console.log(cwd)
+        for file in os.listdir(Path("./")):
+            self.console.log(package_name in file.split(".")[0] and file.split(".")[len(file.split(".")) - 1] in ["gz", "pkg", "zip"])
+            self.console.log(file)
             if package_name in file.split(".")[0] and file.split(".")[len(file.split(".")) - 1] in ["gz", "pkg", "zip"]:
                 valid_files.append(file)
         if(len(valid_files) == 0):
             self.console.log(f"Error: Could not find package {package_name} in current directory", mtype="error")
             return 1
         correct_file = ""
-        current_dir = os.listdir(Path("./"))
+        current_dir = os.listdir(cwd)
         try:
             current_dir.remove("modi.py")
         except:
@@ -937,7 +971,10 @@ class Modi:
         except:
             pass
         for file in valid_files:
-            current_dir.remove(file)
+            try:
+                current_dir.remove(file)
+            except ValueError:
+                pass
         if(len(valid_files) > 1):
             self.console.log("There were multiple valid files to install", mtype="warning")
             correct_file = valid_files[self.console.prompt_selection(f"    Please select {self.__fmt_style('one', 'bold')}", valid_files) - 1]
@@ -945,7 +982,7 @@ class Modi:
             correct_file = valid_files[0]
 
         if(len(current_dir) > 0):
-            self.console.log("The current directory contains files other than modi.py and packages.", mtype="warning") 
+            self.console.log(f"The directory {cwd} contains files other than modi.py and packages.", mtype="warning") 
             self.console.log("If you choose to continue, they will be deleted.", mtype="warning")
             choice = self.console.prompt_bool("    Continue?")
             if(not choice):
@@ -953,11 +990,11 @@ class Modi:
 
         for file in current_dir:
             try:
-                os.remove(Path(f"./{file}"))
+                os.remove(Path(f"{cwd}/{file}"))
             except IsADirectoryError:
-                shutil.rmtree(Path(f"./{file}"))
-    
-        shutil.copy(Path(f"./modi.py"), Path("./modi.py.bak"))
+                shutil.rmtree(Path(f"{cwd}/{file}"))
+        if(Path(os.getcwd()) == cwd):
+            shutil.copy(Path(f"{cwd}/modi.py"), Path("{cwd}/modi.py.bak"))
 
         file_style_string = self.__fmt_style(correct_file, 'bold orchid1')
         package_style_string = self.__fmt_style(package_name, 'bold light_sky_blue1')
@@ -968,36 +1005,37 @@ class Modi:
         if(file_ext == "zip"):
             import zipfile
             zip_hdl = zipfile.ZipFile(Path(f"./{correct_file}"))
-            zip_hdl.extractall(Path("./"))
+            zip_hdl.extractall(Path(f"{cwd}"))
             zip_hdl.close()
             self.console.log(f"{self.__fmt_style('Zip archive', 'bold gold1')} selected, cannot auto-generate requirements.txt", mtype="warning")
         else:
             import tarfile
             tar_hdl = tarfile.open(Path(f"./{correct_file}"))
-            tar_hdl.extractall(Path("./"))
+            tar_hdl.extractall(Path(f"{cwd}"))
             if(file_ext != "pkg"):
                 self.console.log(f"{self.__fmt_style('Tar-GZ archive', 'bold gold1')} selected, cannot auto-generate requirements.txt", mtype="warning")
 
-        for file in os.listdir(Path(f"./{package_name}")):
+        for file in os.listdir(Path(f"{cwd}/{package_name}")):
             try:
-                shutil.copytree(Path(f"./{package_name}/{file}"), Path(f"./{file}"))
+                shutil.copytree(Path(f"{cwd}/{package_name}/{file}"), Path(f"{cwd}/{file}"))
             except NotADirectoryError:
-                shutil.copy(Path(f"./{package_name}/{file}"), Path(f"./{file}")) 
+                shutil.copy(Path(f"{cwd}/{package_name}/{file}"), Path(f"{cwd}/{file}")) 
 
-        shutil.rmtree(Path(f"./{package_name}"))
-        shutil.copy(Path("./modi.py.bak"), Path("./modi.py"))
-        os.remove(Path("./modi.py.bak"))
+        shutil.rmtree(Path(f"{cwd}/{package_name}"))
+        if(Path(os.getcwd()) == cwd):
+            shutil.copy(Path(f"{cwd}/modi.py.bak"), Path("{cwd}/modi.py"))
+            os.remove(Path(f"{cwd}/modi.py.bak"))
 
         if(file_ext == "pkg"):
             try:
-                with open(Path("./modi.meta.json")) as meta_file:
+                with open(Path(f"{cwd}/modi.meta.json")) as meta_file:
                     file_meta = json.loads(meta_file.read())
             except:
                 self.console.log("Invalid or missing meta-information file, cannot write requirements.txt", mtype="warning")
 
-        final_deps = [*file_meta["dependencies"], *file_meta["packages"]]
+        final_deps = [*file_meta["dependencies"]]
         if(file_meta != ""):
-            with open(Path("./requirements.txt"), "w") as req_file:
+            with open(Path(f"{cwd}/requirements.txt"), "w") as req_file:
                 for dep in final_deps:
                     req_file.write(dep)
         finish_time = time.perf_counter()
