@@ -277,9 +277,9 @@ class Modi:
 
             deps = []
 
-            if(os.path.exists(Path(f"{project_dir}/requirements.txt}"))):
+            if(os.path.exists(Path(f"{project_dir}/requirements.txt"))):
                 self.console.log("Pulling dependencies from requirements.txt")
-                with open(Path(f"{project_dir}/requirements.txt}"), "r") as dep_file:
+                with open(Path(f"{project_dir}/requirements.txt"), "r") as dep_file:
                     for line in dep_file.readlines():
                         deps.append(line)
 
