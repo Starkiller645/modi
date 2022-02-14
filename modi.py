@@ -275,9 +275,7 @@ class Modi:
             except:
                 pass
             project_ident = project_name.replace(" ", "_").lower()
-            self.config.obj["projects"][project_ident] = {"name": project_name, "directory": project_dir, "dependencies": []}
-            self.config.write()
-
+            
             proj_type = self.console.prompt(f"{self.__fmt_style('Enter a project type', 'bold gold1')}", choices=["module", "package"])
             self.console.log(f"Create a description for your project (type '@fi' to finish):")
             desc = []
@@ -298,6 +296,8 @@ class Modi:
                     for line in dep_file.readlines():
                         deps.append(line)
 
+            self.config.obj["projects"][project_ident] = {"name": project_name, "directory": project_dir, "dependencies": [], "description": final_desc}
+            self.config.write()
             proj_file = Config(Path(f"{project_dir}/modi.meta.json"))
             proj_file.obj["pkg_name"] = project_ident
             proj_file.obj["pkg_fullname"] = project_name
@@ -312,7 +312,30 @@ class Modi:
             style_string  = self.__fmt_style(project_name, 'bold light_sky_blue1')
             self.console.log(f"Created project {style_string} in {project_dir}", mtype="completion")
             return 0
-            
+        
+        elif args[0] == "unlist" or args[0] == "unlink":
+            for proj_name in args[1:]:
+                self.console.log(f"Unlisting project {proj_name}")
+                if not self.console.prompt_bool("This operation will not delete any files, but will remove the project from Modi's config. Continue?"):
+                    return 1
+                if proj_name not in self.config.obj["projects"]:
+                    self.console.log(f"Error: could not find project '{proj_name}'")
+                    return 1
+                config_backup = self.config.obj["projects"][proj_name]
+                del self.config.obj["projects"][proj_name]
+                self.config.write()
+                style_string  = self.__fmt_style(proj_name, 'bold orchid1')
+                self.console.log(f"Unlisted project {style_string} in {config_backup['directory']}", mtype="completion")
+            return 0
+        
+        elif args[0] == "list":
+            self.console.log("Modi project list:", mtype="info")
+            for project in self.config.obj["projects"].values():
+                proj_style = self.__fmt_style(project["name"], 'bold orchid1')
+                one_line_desc = self.__fmt_style(project["description"].split("\n")[0], 'bold light_sky_blue1')
+                self.console.log(f"{proj_style} in {project['directory']}", mtype="info")
+                self.console.log(f"> {one_line_desc}", mtype="info")
+
         elif args[0] == "delete":
             if(len(args) < 2):
                 return 1
@@ -331,7 +354,7 @@ class Modi:
                 del self.config.obj["projects"][proj_name]
                 self.config.write()
                 style_string  = self.__fmt_style(proj_name, 'bold orchid1')
-                self.console.log(f"Deleted project {style_string}", mtype="completion")
+                self.console.log(f"Deleted project {style_string} in {config_backup['directory']}", mtype="completion")
             return 0
 
         elif args[0] == "show":
@@ -627,9 +650,10 @@ class Modi:
             self.console.log(f"- {self.__fmt_code('modi.py help')}        : Shows the short help view for MODI.", mtype="info")
             self.console.log(f"  > {self.__fmt_code('modi.py help [cmd]')}: Shows detailed help for a specific command.", mtype="info")
 
-    def logo(self):
+    def logo(self, font="colossal"):
         """Show the Modi logo, as a demonstration for Modi's capabilities
         """
+        self.console.log("Running Modi demo...", mtype="info")
         try:
             import pyfiglet
             import rich
@@ -643,12 +667,16 @@ class Modi:
         import rich
         import rich.markup
         lines_arr = []
-        lbr = pyfiglet.figlet_format("[", font="colossal")
-        m = pyfiglet.figlet_format("M", font="colossal")
-        o = pyfiglet.figlet_format("O", font="colossal")
-        d = pyfiglet.figlet_format("D", font="colossal")
-        i = pyfiglet.figlet_format("I", font="colossal")
-        rbr = pyfiglet.figlet_format("]", font="colossal")
+        try:
+            lbr = pyfiglet.figlet_format("[", font=font)
+        except pyfiglet.FontNotFound:
+            self.console.log("Error: invalid PyFiglet font specified", mtype="error")
+            return 1
+        m = pyfiglet.figlet_format("M", font=font)
+        o = pyfiglet.figlet_format("O", font=font)
+        d = pyfiglet.figlet_format("D", font=font)
+        i = pyfiglet.figlet_format("I", font=font)
+        rbr = pyfiglet.figlet_format("]", font=font)
         height = len(lbr.split("\n"))
         lbr = lbr.split("\n")
         m = m.split("\n")
@@ -661,7 +689,7 @@ class Modi:
             lines_arr.append(f"    [bold white]{lbr[j]}[/][bold] [sky_blue2]{rich.markup.escape(m[j])}[/] [light_sky_blue1]{o[j]}[/] [plum1]{d[j]}[/] [orchid2]{i[j]}[/][/bold] [bold white]{rbr[j]}[/bold white]")
         for line in lines_arr:
             rich.print(line)
-        print()
+        return 0
 
 
 
@@ -719,7 +747,10 @@ class Modi:
         elif(args[0] == "remove"):
             self.remove(args[1:])
         elif(args[0] == "logo" or args[0] == "demo"):
-            self.logo()
+            if(len(args) > 1):
+                self.logo(font=args[1])
+            else:
+                self.logo()
         elif(args[0] == "build"):
             self.build(args[1:])
         elif(args[0] == "bootstrap" or args[0] == "setup"):
