@@ -253,8 +253,8 @@ class Modi:
             0: if the project was succesfully created.
         """
         project_dir = ""
+        project_name = ""
         if args[0] == "create" or args[0] == "bootstrap":
-            self.console.log("Creating project...")
             project_name = ""
             project_ident = ""
             project_dir = ""
@@ -277,7 +277,8 @@ class Modi:
                 except:
                     self.console.log("Error: 'into' specified but could not find directory.", mtype="error")
                     return 1
-            self.console.log(project_dir)
+            proj_style_string = self.__fmt_style(project_name, 'bold light_sky_blue1')
+            self.console.log(f"Creating project {proj_style_string} in {project_dir}")
 
             try:
                 os.makedirs(project_dir, exist_ok=True)
@@ -356,8 +357,9 @@ class Modi:
             if(len(args) < 2):
                 return 1
             for proj_name in args[1:]:
-                self.console.log(f"Deleting project {proj_name}")
-                if not self.console.prompt_bool("This operation cannot be undone. Continue?"):
+                fmt_string = self.__fmt_style(proj_name, 'bold orchid1')
+                self.console.log(f"Deleting project {fmt_string}")
+                if not self.console.prompt_bool("    This operation cannot be undone. Continue?"):
                     return 1
                 if proj_name not in self.config.obj["projects"]:
                     self.console.log(f"Error: could not find project '{proj_name}'")
@@ -401,7 +403,7 @@ class Modi:
             if(args[1] == "from"):
                 pkg_name = args[2]
                 if(self.termtype == "rich"):
-                    pkg_name = self.console.prompt("[bold gold1]Enter a package name[/bold gold1]").replace(" ", "-")
+                    pkg_name = self.console.prompt("[bold gold1]Enter a package name to install[/bold gold1]").replace(" ", "-")
                 else:
                     pkg_name = self.console.prompt("    Enter a package name").replace(" ", "-")
             else:
@@ -409,7 +411,7 @@ class Modi:
             if(args[1] != "from" and len(args) < 4):
                 return 1
             pkg_file = args[args.index("from") + 1]
-            res = self.bootstrap(pkg_file, cwd=project_dir)
+            res = self.bootstrap(pkg_file, cwd=project_dir, project_name=project_name)
             return res
             
         elif args[0] == "goto":
@@ -834,7 +836,9 @@ class Modi:
                 with open("requirements.txt", "r") as reqs:
                     for line in reqs.readlines():
                         line = line.strip()
-                        if(line[0] != "-" and line[0] != "." and line != ""):
+                        if(line == ""):
+                            continue
+                        if(line[0] != "-" and line[0] != "."):
                             packages.append(line.split("=")[0])
             except FileNotFoundError:
                 self.console.log("Error: 'auto' mode selected but could not find ./requirements.txt", mtype="error")
@@ -937,7 +941,7 @@ class Modi:
         self.console.log(f"Finished building package {style_string} in {total_time} seconds", mtype="completion")
         return 0
 
-    def bootstrap(self, package_name, cwd=""):
+    def bootstrap(self, package_name, cwd="", project_name=""):
         """Bootstrap a project from a .zip, .tar.gz or (ideally) .modi.pkg file to the CWD
         
         Args:
@@ -951,10 +955,7 @@ class Modi:
         self.console.log(f"Bootstrapping project {package_name}")
         if(cwd == ""):
             cwd = Path(os.getcwd())
-        self.console.log(cwd)
         for file in os.listdir(Path("./")):
-            self.console.log(package_name in file.split(".")[0] and file.split(".")[len(file.split(".")) - 1] in ["gz", "pkg", "zip"])
-            self.console.log(file)
             if package_name in file.split(".")[0] and file.split(".")[len(file.split(".")) - 1] in ["gz", "pkg", "zip"]:
                 valid_files.append(file)
         if(len(valid_files) == 0):
@@ -1032,7 +1033,11 @@ class Modi:
                     file_meta = json.loads(meta_file.read())
             except:
                 self.console.log("Invalid or missing meta-information file, cannot write requirements.txt", mtype="warning")
-
+        if(project_name != ""):
+            file_meta["pkg_name"] = project_name.replace(' ', '-')
+            file_meta["pkg_fullname"] = project_name
+        with open(Path(f"{cwd}/modi.meta.json"), "w") as meta_file:
+            meta_file.write(json.dumps(file_meta, indent=4))
         final_deps = [*file_meta["dependencies"]]
         if(file_meta != ""):
             with open(Path(f"{cwd}/requirements.txt"), "w") as req_file:
@@ -1040,10 +1045,15 @@ class Modi:
                     req_file.write(dep)
         finish_time = time.perf_counter()
         total_time = round(finish_time - start_time, 1)
-        if(file_ext == "pkg"):
-            self.console.log(f"Successfully bootstrapped package {package_name} and {len(final_deps)} dependencies in {total_time} seconds", mtype="completion")
+        print_string = ""
+        if(file_ext == "pkg" and project_name != ""):
+            proj_string = self.__fmt_style(project_name, 'bold light_sky_blue1')
+            print_string = f"Successfully bootstrapped package '{package_name}' and {len(final_deps)} dependencies into project {proj_string} in {total_time} seconds"
+        elif(file_ext == "pkg"):
+            print_string = f"Successfully bootstrapped package '{package_name}' and {len(final_deps)} dependencies in {total_time} seconds"
         else:
-            self.console.log(f"Successfully bootstrapped package {package_name} and all dependencies in {total_time} seconds", mtype="completion")
+            print_string = f"Successfully bootstrapped package {package_name} and all dependencies in {total_time} seconds"
+        self.console.log(print_string, mtype="completion")
         return 0
         
 
