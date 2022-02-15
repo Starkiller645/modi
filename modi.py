@@ -205,13 +205,13 @@ class Modi:
            pass 
         elif(mode == "interactive"): 
             if(self.termtype == "rich"):
-                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.5")
+                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.6")
             else:
                 print("    Starting MODI v0.1")
             self.parseargs(args)
         elif(mode == "shell"):
             if(self.termtype == "rich"):
-                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.5")
+                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.6")
             else:
                 print("    Starting MODI v0.1")
             self.shell()
