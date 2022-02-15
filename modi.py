@@ -1042,7 +1042,7 @@ class Modi:
         if(file_meta != ""):
             with open(Path(f"{cwd}/requirements.txt"), "w") as req_file:
                 for dep in final_deps:
-                    req_file.write(dep)
+                    req_file.write(dep + "\n")
         finish_time = time.perf_counter()
         total_time = round(finish_time - start_time, 1)
         print_string = ""
