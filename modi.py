@@ -448,7 +448,7 @@ class Modi:
             print()
             self.console.log("Bye!", mtype="completion")
 
-    def install_local(self, args, return_deps=False, no_projects=True):
+    def install_local(self, args, return_deps=False, no_projects=True, add_reqs=True):
         """Wrap Modi.install to install local packages more easily
         
         Args:
@@ -469,12 +469,14 @@ class Modi:
                     dep = dep.strip()
         except FileNotFoundError:
             pass
-        with open(Path("./requirements.txt"), "w") as req_file:
-            for pkg in packages:
-                if pkg not in current_deps:
-                    current_deps.append(pkg)
-            for dep in current_deps:
-                req_file.write(dep + "\n")
+        
+        if(add_reqs):
+            with open(Path("./requirements.txt"), "w") as req_file:
+                for pkg in packages:
+                    if pkg not in current_deps:
+                        current_deps.append(pkg)
+                for dep in current_deps:
+                    req_file.write(dep + "\n")
 
         inst_args = ["local"]
 
@@ -691,7 +693,7 @@ class Modi:
         except ImportError:
             if not self.console.prompt_bool("    PyFiglet and Rich not found. Install?"):
                 return 1
-            if self.install_local(["pyfiglet", "rich"]) == 1:
+            if self.install_local(["pyfiglet", "rich"], no_projects=False, add_reqs=False) == 1:
                 self.console.log("Could not install PyFiglet and Rich, exiting...", mtype="error")
                 return 1
         import pyfiglet
@@ -717,7 +719,7 @@ class Modi:
         rbr = rbr.split("\n")
         print()
         for j in range(height):
-            lines_arr.append(f"    [bold white]{lbr[j]}[/][bold] [sky_blue2]{rich.markup.escape(m[j])}[/] [light_sky_blue1]{o[j]}[/] [plum1]{d[j]}[/] [orchid2]{i[j]}[/][/bold] [bold white]{rbr[j]}[/bold white]")
+            lines_arr.append(f"    [bold grey100]{lbr[j]}[/][bold] [sky_blue2]{rich.markup.escape(m[j])}[/] [light_sky_blue1]{o[j]}[/] [plum1]{d[j]}[/] [orchid2]{i[j]}[/][/bold] [bold grey100]{rbr[j]}[/bold grey100]")
         for line in lines_arr:
             rich.print(line)
         return 0
@@ -757,7 +759,7 @@ class Modi:
         except:
             self.console.log("Error: Project files not found. Run 'modi.py project create' to create a new project in this directory", mtype="error")
 
-        self.install_local(req_pkgs, return_deps=False, no_projects=False)
+        self.install_local(req_pkgs, return_deps=False, no_projects=False, add_reqs=False)
 
     def parseargs(self, *args, shell=False):
         args = args[0]
