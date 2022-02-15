@@ -659,9 +659,12 @@ class Modi:
             name (str): the name of a command to help with. Defaults to "", which shows basic help
         """
         self.console.log(f"{self.__fmt_style('MODI Help:', 'bold')}", mtype="info")
-        if name not in ["install", "help", "remove", "build", "bootstrap", "setup"]:
-            self.console.log(f"- {self.__fmt_code('modi.py install [args]')} : Installs one or more packages", mtype="info")
-            self.console.log(f"- {self.__fmt_code('modi.py help [cmd]')}     : Shows the help page, either this or the detailed view for cmd", mtype="info")
+        if name not in ["install", "help", "remove", "build", "bootstrap", "setup", "project", "shell"]:
+            self.console.log(f"- {self.__fmt_code('modi.py install [args]')}  : Installs one or more packages", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py build [args]')}    : Build a Modi package in the CWD", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py bootstrap [args]')}: Bootstraps a directory from the contents of a Modi package", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py project [args]')}  : Create, manage, bootstrap and delete Modi projects", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py help [cmd]')}      : Shows the help page, either this or the detailed view for cmd", mtype="info")
         elif name == "install":
             self.console.log(f"- {self.__fmt_code('modi.py install <package> [package] [...]')}         : Installs one or more packages to the global MODI cache (by default @ ~/.modi_cache)", mtype="info")
             self.console.log(f"  > {self.__fmt_code('modi.py install @<package> [package] [...]')}      : Same as above, but forcing use of the setuptools install method. Use if the previous option isn't working.", mtype="info")
@@ -674,8 +677,15 @@ class Modi:
         elif name == "build":
             self.console.log(f"- {self.__fmt_code('modi.py build freeze <output type> [pkg_name]')} : Builds a compressed archive in the format <output type> (either 'tar' or 'zip') from the contents of the CWD. The pkg_name will be prompted if it is not given", mtype="info")
             self.console.log(f"- {self.__fmt_code('modi.py build auto <output type> [pkg_name]')}  : Builds a compressed archive in the format <output type> (either 'tar' or 'zip') from the list of requirements in ./requirements.txt", mtype="info")
-        elif name == "setup":
-            self.console.log(f"- {self.__fmt_code('modi.py setup <pkg_name>')}: Alias for {self.__fmt_code('modi.py bootstrap <pkg_name>')}")
+        elif name == "project":
+            self.console.log(f"- {self.__fmt_code('modi.py project create [name] [directory]')}               : Creates a new project in the directory [directory] (if given, otherwise in CWD). The name will be prompted if not given.", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py project delete <name>')}                           : Removes a project from Modi's config and deletes the directory it's located in. Will prompt before deletion.", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py project unlist <name>')}                           : Removes a project from Modi's config, but keeps the directory it's located in.", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py project goto <name>')}                             : In the Modi Shell, jumps to the directory of the specified project (equivalent to cd).", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py project bootstrap <name> from <pkg>')}             : Creates a new project the same as self.__fmt_code('modi.py project create'), but also initialises it from a Modi package.", mtype="info")
+            self.console.log(f"  > {self.__fmt_code('modi.py project bootstrap <name> from <pkg> into <dir>')}: Same as above, but use <dir> as the working/project directory.", mtype="info")
+        elif name == "shell":
+            self.console.log(f"- {self.__fmt_code('modi.py shell')} : Launches a shell, where all Modi commands (as well as some shell extras like `cd` and `ls`) are available without prefixing with 'modi.py'", mtype="info")
         elif name == "bootstrap":
             self.console.log(f"- {self.__fmt_code('modi.py bootstrap <pkg_name>')}: Removes all other files in the CWD (except modi.py and any archive files beginning with <pkg_name>) and bootstraps the project from a corresponding archive.")
             self.console.log(f" > e.g. {self.__fmt_code('modi.py bootstrap asciimatics')} would install a package from either 'asciimatics.zip', 'asciimatics.tar.gz' or (preferably) 'asciimatics.modi.pkg'.")
@@ -685,6 +695,12 @@ class Modi:
 
     def logo(self, font="colossal"):
         """Show the Modi logo, as a demonstration for Modi's capabilities
+        
+        Args:
+            font (str): a PyFiglet font to use for the demo
+        Returns:
+            1: If the function threw an error
+            0: If the function ran successfully
         """
         self.console.log("Running Modi demo...", mtype="info")
         try:
@@ -724,6 +740,35 @@ class Modi:
             rich.print(line)
         return 0
 
+    def heat(self, *args):
+        """Heat from fire, fire from heat"""
+        args = args[0]
+        try:
+            if(args[1] != "fire"):
+                return 1
+        except IndexError:
+            return 1
+        if(args[0] != "from"):
+            return 1
+        try:
+            import pyfiglet
+            import rich
+        except ImportError:
+            if not self.console.prompt_bool("    PyFiglet and Rich not found. Install?"):
+                return 1
+            if self.install_local(["pyfiglet", "rich"], no_projects=False, add_reqs=False) == 1:
+                self.console.log("Could not install PyFiglet and Rich, exiting...", mtype="error")
+                return 1
+        import pyfiglet
+        import rich
+        import rich.markup
+        colors_arr = ["bold light_sky_blue1", "bold light_sky_blue1", "bold pink1", "bold grey100", "bold pink1", "bold pink1", "bold light_sky_blue1", "grey100", "grey100", "grey100"]
+        lines_arr = pyfiglet.figlet_format("Heat from Fire      Fire from Heat", font="roman", width=150).splitlines(False)
+        self.console.log(len(lines_arr))
+        i = 0
+        for line in lines_arr:
+            self.console.log(self.__fmt_style(line, colors_arr[i % 10]), mtype="info")
+            i += 1
 
 
     def add(self, pkgs):
@@ -762,6 +807,16 @@ class Modi:
         self.install_local(req_pkgs, return_deps=False, no_projects=False, add_reqs=False)
 
     def parseargs(self, *args, shell=False):
+        """Parse arguments and call appropriate functions within the class
+
+        Args:
+            *args (variadic str): A list of arguments, such as from sys.argv
+            shell (bool): Whether to enable some additional convenienve functions such as ls and cd
+
+        Returns:
+            1: if there was an error with the arguments parsed
+            Nothing: if a command was run
+        """
         args = args[0]
         if(len(args) <= 0):
             self.console.log("Error: no valid operation specified", mtype="error")
@@ -798,6 +853,8 @@ class Modi:
             self.ls()
         elif((args[0] == "cd") and shell):
             self.cd(args[1])
+        elif((args[0] == "heat") and shell):
+            self.heat(args[1:])
         else:
             self.console.log("Error: no valid operation specified", mtype="error")
             return 1
