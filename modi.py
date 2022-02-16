@@ -221,6 +221,38 @@ class Modi:
     # | | |
     # v v v
 
+    def try_import(self, module, pkg_name="", prompt=True):
+        """Attempt to import a module. If not found, install locally and try again
+        
+        Args:
+            module (str): The name of a Python module to try importing
+            pkg_name (str): If given, the name of the PyPi package for the module, if different from the module name
+            prompt (bool): Whether to prompt before installation.
+        Returns:
+            1: If after attempting download, the package could not be installed/imported
+            0: If the module was imported successfully
+
+        """
+        import importlib
+        if(pkg_name == ""):
+            pkg_name = module
+        try:
+            importlib.import_module(module)
+        except ImportError:
+            res = 0
+            if(prompt):
+                res = self.console.prompt_bool(f"The module '{module}' could not be found. Install?")
+            if(res != 0):
+                return 1
+            res = self.install_local([pkg_name])
+            if res != 0:
+                return 1
+            try:
+                importlib.import_module(module)
+            except ImportError:
+                return 1
+            return 0
+
     def cd(self, directory):
         """Set the current working directory of the Python process
 
@@ -692,6 +724,10 @@ class Modi:
         elif name == "help":
             self.console.log(f"- {self.__fmt_code('modi.py help')}        : Shows the short help view for MODI.", mtype="info")
             self.console.log(f"  > {self.__fmt_code('modi.py help [cmd]')}: Shows detailed help for a specific command.", mtype="info")
+        elif name == "demo":
+            self.console.log(f"- {self.__fmt_code('modi.py demo [font]')}: Shows Modi's logo with PyFiglet + Rich, downloading if necessary. Optionally uses the specified PyFiglet font.", mtype="info")
+        elif name == "logo":
+            self.console.log(f"- {self.__fmt_code('modi.py logo [font]')}: Alias for {self.__fmt_code('modi.py demo [logo]')}", mtype="info")
 
     def logo(self, font="colossal"):
         """Show the Modi logo, as a demonstration for Modi's capabilities
@@ -763,7 +799,7 @@ class Modi:
         import rich
         import rich.markup
         colors_arr = ["bold light_sky_blue1", "bold light_sky_blue1", "bold pink1", "bold grey100", "bold pink1", "bold pink1", "bold light_sky_blue1", "grey100", "grey100", "grey100"]
-        lines_arr = pyfiglet.figlet_format("Heat from Fire      Fire from Heat", font="roman", width=150).splitlines(False)
+        lines_arr = pyfiglet.figlet_format("Fire from Heat", font="roman", width=150).splitlines(False)
         self.console.log(len(lines_arr))
         i = 0
         for line in lines_arr:
