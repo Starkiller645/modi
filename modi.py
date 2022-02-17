@@ -753,15 +753,15 @@ class Modi:
         import rich.markup
         lines_arr = []
         try:
-            lbr = pyfiglet.figlet_format("[", font=font)
+            lbr = self.__fmt_style(pyfiglet.figlet_format("[", font=font), 'bold grey100')
         except pyfiglet.FontNotFound:
             self.console.log("Error: invalid PyFiglet font specified", mtype="error")
             return 1
-        m = pyfiglet.figlet_format("M", font=font)
-        o = pyfiglet.figlet_format("O", font=font)
-        d = pyfiglet.figlet_format("D", font=font)
-        i = pyfiglet.figlet_format("I", font=font)
-        rbr = pyfiglet.figlet_format("]", font=font)
+        m = self.__fmt_style(pyfiglet.figlet_format("M", font=font), 'bold sky_blue2')
+        o = self.__fmt_style(pyfiglet.figlet_format("O", font=font), 'bold light_sky_blue1')
+        d = self.__fmt_style(pyfiglet.figlet_format("D", font=font), 'bold plum1')
+        i = self.__fmt_style(pyfiglet.figlet_format("I", font=font), 'bold orchid2')
+        rbr = self.__fmt_style(pyfiglet.figlet_format("]", font=font), 'bold grey100')
         height = len(lbr.split("\n"))
         lbr = lbr.split("\n")
         m = m.split("\n")
@@ -771,9 +771,9 @@ class Modi:
         rbr = rbr.split("\n")
         print()
         for j in range(height):
-            lines_arr.append(f"    [bold grey100]{lbr[j]}[/][bold] [sky_blue2]{rich.markup.escape(m[j])}[/] [light_sky_blue1]{o[j]}[/] [plum1]{d[j]}[/] [orchid2]{i[j]}[/][/bold] [bold grey100]{rbr[j]}[/bold grey100]")
+            lines_arr.append(f"{lbr[j]} {m[j]} {o[j]} {d[j]} {i[j]} {rbr[j]}")
         for line in lines_arr:
-            rich.print(line)
+            self.console.log(line, mtype="info")
         return 0
 
     def heat(self, *args):
@@ -839,7 +839,8 @@ class Modi:
                     reqs.write(dep)
         except:
             self.console.log("Error: Project files not found. Run 'modi.py project create' to create a new project in this directory", mtype="error")
-
+        self.config.obj["projects"][proj_conf["pkg_name"]]["dependencies"] = proj_conf["dependencies"]
+        self.config.write()
         self.install_local(req_pkgs, return_deps=False, no_projects=False, add_reqs=False)
 
     def parseargs(self, *args, shell=False):
