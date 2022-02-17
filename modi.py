@@ -242,7 +242,7 @@ class Modi:
             res = 0
             if(prompt):
                 res = self.console.prompt_bool(f"The module '{module}' could not be found. Install?")
-            if(res != 0):
+            if(res != True):
                 return 1
             res = self.install_local([pkg_name])
             if res != 0:
@@ -250,6 +250,7 @@ class Modi:
             try:
                 importlib.import_module(module)
             except ImportError:
+                self.console.log("Error: could not download and import module", mtype="error")
                 return 1
             return 0
 

@@ -26,9 +26,10 @@ except ImportError:
     except ImportError:
         modi_inst.console.log("Could not install PyQt5. Exiting now...", mtype="error")
         sys.exit(1)
+modi_inst.try_import("numpy")
+import numpy
 
 def fuzzy_search(s, t, ratio_calc=True):
-    import numpy as np
     """ levenshtein_ratio_and_distance:
         Calculates levenshtein distance between two strings.
         If ratio_calc = True, the function computes the
@@ -39,7 +40,7 @@ def fuzzy_search(s, t, ratio_calc=True):
     """
     rows = len(s)+1
     cols = len(t)+1
-    distance = np.zeros((rows,cols),dtype = int)
+    distance = numpy.zeros((rows,cols),dtype = int)
 
     for i in range(1, rows):
         for k in range(1,cols):
