@@ -10,23 +10,21 @@ from html.parser import HTMLParser
 modi_inst = modi.Modi()
 
 try:
-    from PyQt5.QtWidgets import *
-    from PyQt5.QtNetwork import *
-    from PyQt5.QtCore import *
-    from PyQt5.QtGui import *
+    from PyQt6.QtWidgets import *
+    from PyQt6.QtNetwork import *
+    from PyQt6.QtCore import *
+    from PyQt6.QtGui import *
 except ImportError:
-    if not modi_inst.console.prompt_bool("Modi GUI requires PyQt5. Install?"):
-        sys.exit(1)
-    if modi_inst.install_local(["PyQt5"]) == 1:
-        modi_inst.console.log("Could not install PyQt5. Exiting now...", mtype="error")
+    res = modi_inst.try_import('PyQt6')
+    if(res == 1):
         sys.exit(1)
     try:
-        from PyQt5.QtWidgets import *
-        from PyQt5.QtNetwork import *
-        from PyQt5.QtCore import *
-        from PyQt5.QtGui import *
+        from PyQt6.QtWidgets import *
+        from PyQt6.QtNetwork import *
+        from PyQt6.QtCore import *
+        from PyQt6.QtGui import *
     except ImportError:
-        modi_inst.console.log("Could not install PyQt5. Exiting now...", mtype="error")
+        modi_inst.console.log("Could not install PyQt6. Exiting now...", mtype="error")
         sys.exit(1)
 modi_inst.try_import("numpy")
 import numpy
@@ -75,10 +73,10 @@ class Package(QWidget):
         self.pkg_ver = QLabel(f"<i>{package_ver}</i>")
         self.add = QPushButton("Add")
         self.spacer = QWidget()
-        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.pkg_name.setWordWrap(True)
         self.setMinimumHeight(60)
-        self.spacer.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
+        self.spacer.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Preferred)
         self.main_layout.addWidget(self.pkg_name)
         self.main_layout.addWidget(self.pkg_ver)
         self.main_layout.addWidget(self.spacer)
@@ -154,12 +152,14 @@ class ModiMinimalWindow(QMainWindow):
         self.package_widget = QWidget()
         self.package_layout = QVBoxLayout()
         self.package_scroll = QScrollArea()
+        self.package_frame = QFrame()
         self.queue_widget = QWidget()
         self.queue_layout = QVBoxLayout()
         self.queue_scroll = QScrollArea()
+        self.queue_frame = QFrame()
         self.sep = QFrame()
-        self.sep.setFrameShape(QFrame.HLine)
-        self.sep.setFrameShadow(QFrame.Sunken)
+        self.sep.setFrameShape(QFrame.Shape.HLine)
+        self.sep.setFrameShadow(QFrame.Shadow.Sunken)
         self.download_bar = QProgressBar()
         self.download_info = QLabel("<i>Downloading package list from PyPi</i>")
         self.install_button = QPushButton("Install")
@@ -180,11 +180,11 @@ class ModiMinimalWindow(QMainWindow):
         self.install_button.clicked.connect(self.install)
         
         self.main_widget.setLayout(self.main_layout)
-        self.download_info.setAlignment(Qt.AlignTop)
-        self.pkg_placeholder.setAlignment(Qt.AlignCenter)
-        self.search_placeholder.setAlignment(Qt.AlignCenter)
-        self.package_layout.setAlignment(Qt.AlignTop)
-        self.queue_layout.setAlignment(Qt.AlignTop)
+        self.download_info.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.pkg_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.search_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.package_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.queue_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.package_widget.setLayout(self.package_layout)
         self.queue_widget.setLayout(self.queue_layout)
         #self.packages.setWidget(self.package_widget)
@@ -220,6 +220,8 @@ class ModiMinimalWindow(QMainWindow):
         self.to_install = []
         self.pkgs = []
         self.searched_pkgs = []
+        self.timers = []
+
         self.download_pypi_index()
 
     def install(self):
@@ -294,7 +296,7 @@ class ModiMinimalWindow(QMainWindow):
         self.download_bar.setRange(0, 100)
         self.download_bar.setValue(50)
         self.download_info.setText("<i>Formatting package list...</i>")
-        if error == QNetworkReply.NoError:
+        if error == QNetworkReply.NetworkError.NoError:
             bytes_str = res.readAll()
             self.thread = QThread()
             self.ml_worker = MLWorker(bytes_str)
@@ -321,6 +323,9 @@ class ModiMinimalWindow(QMainWindow):
     def search_pkgs(self):
         self.searched_pkgs = []
         search = self.input.text()
+        for timer in self.timers:
+            timer.stop()
+            timer.deleteLater()
         if(search == ""):
             self.pkg_placeholder.show()
             self.package_scroll.hide()
@@ -337,28 +342,47 @@ class ModiMinimalWindow(QMainWindow):
         if(len(search) >= 4 and len(self.searched_pkgs) <= 300):
             self.searched_pkgs.sort(key=lambda query, s=search: fuzzy_search(query, s))
             self.searched_pkgs.reverse()
-        elif(len(self.searched_pkgs) >= 300):
+        else:
+            self.searched_pkgs.reverse()
             self.searched_pkgs.sort(key=lambda query, s=search: int(query == s))
             self.searched_pkgs.reverse()
         for i in reversed(range(self.package_layout.count())): 
             self.package_layout.itemAt(i).widget().setParent(None) 
 
         self.queue_wds = {}
+        list_list = []
+        if(len(self.searched_pkgs) > 50):
+            for i in range(len(self.searched_pkgs) % 50):
+                if(i != len(self.searched_pkgs)):
+                    list_list.append(self.searched_pkgs[(i * 50):((i + 1) * 50) - 1])
+                else:
+                    list_list.append(self.searched_pkgs[i * 50:])
+            self.timers = []
+            for i in range(len(list_list)):
+                self.timers.append(QTimer())
+                self.timers[i].setSingleShot(True)
+                self.timers[i].timeout.connect(lambda a=list_list[i]: self.add_pkg_widgets(a))
+                self.timers[i].start(400 * i)
+        else:   
+                self.timers = []
+                self.add_pkg_widgets(self.searched_pkgs)
+
         
-        for pkg in self.searched_pkgs:
+    def add_pkg_widgets(self, arr):
+        for pkg in arr:
             self.queue_wds[pkg] = Package(pkg, "v0.1")
-            if(pkg == search):
+            if(pkg == self.input.text()):
                 self.queue_wds[pkg].pkg_name.setStyleSheet("color: #afd7ff;")
             self.queue_wds[pkg].add.clicked.connect(lambda nul, pkg=pkg: self.add_pkg(pkg))
             self.package_layout.addWidget(self.queue_wds[pkg])
-
-
         if(len(self.queue_wds) != 0):
             self.pkg_placeholder.hide()
             self.package_scroll.show()
         if(len(self.queue_wds) == 0):
             self.package_scroll.hide()
             self.pkg_placeholder.show()
+
+
 
     def try_add_callback(self):
         search = self.input.text()
@@ -390,5 +414,4 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = ModiMinimalWindow()
     window.show()
-    app.exec_()
-
+    app.exec()

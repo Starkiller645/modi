@@ -241,7 +241,8 @@ class Modi:
         except ImportError:
             res = 0
             if(prompt):
-                res = self.console.prompt_bool(f"The module '{module}' could not be found. Install?")
+                style_str = self.__fmt_style(f"    The module ", 'bold gold1') + self.__fmt_style(f"'{module}'", 'bold light_sky_blue1') + self.__fmt_style(" could not be found. Install?", 'bold gold1')
+                res = self.console.prompt_bool(style_str)
             if(res != True):
                 return 1
             res = self.install_local([pkg_name])
