@@ -16,8 +16,6 @@ try:
     from PyQt6.QtGui import *
 except ImportError:
     res = modi_inst.try_import('PyQt6')
-    if(res == 1):
-        sys.exit(1)
     try:
         from PyQt6.QtWidgets import *
         from PyQt6.QtNetwork import *
@@ -163,7 +161,6 @@ class ModiMinimalWindow(QMainWindow):
         self.download_bar = QProgressBar()
         self.download_info = QLabel("<i>Downloading package list from PyPi</i>")
         self.install_button = QPushButton("Install")
-        self.install_button.setStyleSheet("color: #ffafaf; font-weight: bold; font-size: 14px;")
         self.install_button.setEnabled(False)
 
         self.add_pkg_shortcut = QShortcut(QKeySequence("Return"), self)

@@ -121,6 +121,7 @@ class Output:
                 i += 1
             return_value = IntPrompt(choices=choices).ask(text)
             return return_value
+
     
     def prompt(self, text, choices=[]):
         choice = ""
@@ -254,6 +255,23 @@ class Modi:
                 self.console.log("Error: could not download and import module", mtype="error")
                 return 1
             return 0
+
+    def gui(self, args):
+        if(len(args) == 0):
+            self.console.log(f"Error: full GUI not available yet. Please use {self.__fmt_code('modi.py gui minimal')} for now.", mtype="error")
+            return 1
+        if(args[0] == "full"):
+            self.console.log(f"Error: full GUI not available yet. Please use {self.__fmt_code('modi.py gui minimal')} for now.", mtype="error")
+            return 1
+        elif(args[0] == "minimal"):
+            from gui_minimal import ModiMinimalWindow, ModiInstallWorker, MLWorker, MLStripper, Package, fuzzy_search
+            from PyQt6.QtWidgets import QApplication, QMainWindow
+            app = QApplication([])
+            window = ModiMinimalWindow()
+            window.show()
+            app.exec()
+
+
 
     def cd(self, directory):
         """Set the current working directory of the Python process
@@ -888,6 +906,8 @@ class Modi:
             self.project(args[1:])
         elif(args[0] == "add"):
             self.add(args[1:])
+        elif(args[0] == "gui"):
+            self.gui(args[1:])
         elif((args[0] == "ls" or args[0] == "dir") and shell):
             self.ls()
         elif((args[0] == "cd") and shell):
