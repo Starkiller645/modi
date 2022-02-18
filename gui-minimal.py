@@ -13,6 +13,7 @@ try:
     from PyQt5.QtWidgets import *
     from PyQt5.QtNetwork import *
     from PyQt5.QtCore import *
+    from PyQt5.QtGui import *
 except ImportError:
     if not modi_inst.console.prompt_bool("Modi GUI requires PyQt5. Install?"):
         sys.exit(1)
@@ -23,6 +24,7 @@ except ImportError:
         from PyQt5.QtWidgets import *
         from PyQt5.QtNetwork import *
         from PyQt5.QtCore import *
+        from PyQt5.QtGui import *
     except ImportError:
         modi_inst.console.log("Could not install PyQt5. Exiting now...", mtype="error")
         sys.exit(1)
@@ -73,6 +75,9 @@ class Package(QWidget):
         self.pkg_ver = QLabel(f"<i>{package_ver}</i>")
         self.add = QPushButton("Add")
         self.spacer = QWidget()
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.pkg_name.setWordWrap(True)
+        self.setMinimumHeight(60)
         self.spacer.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
         self.main_layout.addWidget(self.pkg_name)
         self.main_layout.addWidget(self.pkg_ver)
@@ -148,8 +153,10 @@ class ModiMinimalWindow(QMainWindow):
         #self.packages = QScrollArea()
         self.package_widget = QWidget()
         self.package_layout = QVBoxLayout()
+        self.package_scroll = QScrollArea()
         self.queue_widget = QWidget()
         self.queue_layout = QVBoxLayout()
+        self.queue_scroll = QScrollArea()
         self.sep = QFrame()
         self.sep.setFrameShape(QFrame.HLine)
         self.sep.setFrameShadow(QFrame.Sunken)
@@ -158,6 +165,14 @@ class ModiMinimalWindow(QMainWindow):
         self.install_button = QPushButton("Install")
         self.install_button.setStyleSheet("color: #ffafaf; font-weight: bold; font-size: 14px;")
         self.install_button.setEnabled(False)
+
+        self.add_pkg_shortcut = QShortcut(QKeySequence("Return"), self)
+        self.add_pkg_shortcut.setAutoRepeat(False)
+        self.add_pkg_shortcut.activated.connect(self.try_add_callback)
+
+        self.install_queue_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
+        self.install_queue_shortcut.setAutoRepeat(False)
+        self.install_queue_shortcut.activated.connect(self.install_button.click)
 
         self.pkg_placeholder = QLabel("<i>Search results will appear here</i>")
         self.search_placeholder = QLabel("<i>Add some packages by searching!</i>")
@@ -168,20 +183,33 @@ class ModiMinimalWindow(QMainWindow):
         self.download_info.setAlignment(Qt.AlignTop)
         self.pkg_placeholder.setAlignment(Qt.AlignCenter)
         self.search_placeholder.setAlignment(Qt.AlignCenter)
+        self.package_layout.setAlignment(Qt.AlignTop)
+        self.queue_layout.setAlignment(Qt.AlignTop)
         self.package_widget.setLayout(self.package_layout)
         self.queue_widget.setLayout(self.queue_layout)
         #self.packages.setWidget(self.package_widget)
 
-        self.package_widget.hide()
-        self.queue_widget.hide()
+        self.package_scroll.setWidgetResizable(True)
+        self.queue_scroll.setWidgetResizable(True)
+
+        self.package_scroll.setWidget(self.package_widget)
+        self.queue_scroll.setWidget(self.queue_widget)
+
+        self.package_scroll.hide()
+        self.package_scroll.setFixedHeight(256)
+        self.queue_scroll.hide()
+        self.queue_scroll.setFixedHeight(256)
+
+        self.pkg_placeholder.setFixedHeight(256)
+        self.search_placeholder.setFixedHeight(256)
 
         self.main_layout.addWidget(self.input)
         self.main_layout.addWidget(self.download_bar)
         self.main_layout.addWidget(self.download_info)
-        self.main_layout.addWidget(self.package_widget)
+        self.main_layout.addWidget(self.package_scroll)
         self.main_layout.addWidget(self.pkg_placeholder)
         self.main_layout.addWidget(self.sep)
-        self.main_layout.addWidget(self.queue_widget)
+        self.main_layout.addWidget(self.queue_scroll)
         self.main_layout.addWidget(self.search_placeholder)
         self.main_layout.addWidget(self.install_button)
 
@@ -226,17 +254,26 @@ class ModiMinimalWindow(QMainWindow):
             self.sep.show()
         for i in reversed(range(self.queue_layout.count())): 
             self.queue_layout.itemAt(i).widget().setParent(None) 
-        self.queue_widget.hide()
+        self.queue_scroll.hide()
         self.search_placeholder.show()
         self.pkg_placeholder.show()
+        self.install_button.setEnabled(False)
 
 
     def update_progress_callback(self, prog):
+        try:
+            pkg_name = self.queue_layout.itemAt(prog).widget().pkg_name.text()
+        except:
+            return
+        self.download_info.setText(f"<b>Downloading package {pkg_name}</b>")
+
         if(prog == 0):
             self.download_bar.setRange(0, 0)
         else:
-            self.download_bar.setRange(0, len(self.to_install))
+            self.download_bar.setRange(0, len(self.to_install) - 1)
             self.download_bar.setValue(prog)
+            self.queue_layout.itemAt(prog - 1).widget().pkg_name.setStyleSheet("color: #5fd7af;")
+
 
     def download_pypi_index(self):
         url = "https://pypi.org/simple/"
@@ -278,13 +315,15 @@ class ModiMinimalWindow(QMainWindow):
             self.pkgs[i] = self.pkgs[i].strip()
         self.download_bar.setValue(100)
         self.input.textChanged.connect(self.search_pkgs)
+        if(self.input.text() != ""):
+            self.search_pkgs()
 
     def search_pkgs(self):
         self.searched_pkgs = []
         search = self.input.text()
         if(search == ""):
             self.pkg_placeholder.show()
-            self.package_widget.hide()
+            self.package_scroll.hide()
             return
         if(len(search) >= 4):
             for pkg in self.pkgs:
@@ -298,23 +337,35 @@ class ModiMinimalWindow(QMainWindow):
         if(len(search) >= 4 and len(self.searched_pkgs) <= 300):
             self.searched_pkgs.sort(key=lambda query, s=search: fuzzy_search(query, s))
             self.searched_pkgs.reverse()
+        elif(len(self.searched_pkgs) >= 300):
+            self.searched_pkgs.sort(key=lambda query, s=search: int(query == s))
+            self.searched_pkgs.reverse()
         for i in reversed(range(self.package_layout.count())): 
             self.package_layout.itemAt(i).widget().setParent(None) 
 
         self.queue_wds = {}
         
-        for pkg in self.searched_pkgs[:5]:
+        for pkg in self.searched_pkgs:
             self.queue_wds[pkg] = Package(pkg, "v0.1")
+            if(pkg == search):
+                self.queue_wds[pkg].pkg_name.setStyleSheet("color: #afd7ff;")
             self.queue_wds[pkg].add.clicked.connect(lambda nul, pkg=pkg: self.add_pkg(pkg))
             self.package_layout.addWidget(self.queue_wds[pkg])
 
 
         if(len(self.queue_wds) != 0):
             self.pkg_placeholder.hide()
-            self.package_widget.show()
+            self.package_scroll.show()
         if(len(self.queue_wds) == 0):
-            self.package_widget.hide()
+            self.package_scroll.hide()
             self.pkg_placeholder.show()
+
+    def try_add_callback(self):
+        search = self.input.text()
+        if(search in self.queue_wds.keys()):
+            self.add_pkg(search)
+        else:
+            return
 
     def add_pkg(self, pkg):
         for i in reversed(range(self.package_layout.count())): 
@@ -324,17 +375,20 @@ class ModiMinimalWindow(QMainWindow):
         self.queue_layout.addWidget(self.queue_wds[pkg])
         self.input.setText("")
         self.to_install.append(pkg)
+        print(self.package_scroll.size())
+        print(self.queue_scroll.size())
         if(len(self.queue_wds) > 0):
             self.search_placeholder.hide()
-            self.queue_widget.show()
+            self.queue_scroll.show()
             self.install_button.setEnabled(True)
         if(len(self.queue_wds) == 0):
-            self.queue_widget.hide()
+            self.queue_scroll.hide()
             self.search_placeholder.show()
 
 if __name__ == "__main__":
-    app = QApplication([])
-    window = ModiMinimalWindow()    
+    import sys
+    app = QApplication(sys.argv)
+    window = ModiMinimalWindow()
     window.show()
     app.exec_()
 
