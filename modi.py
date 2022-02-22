@@ -379,7 +379,7 @@ class Modi:
         elif args[0] == "unlist" or args[0] == "unlink":
             for proj_name in args[1:]:
                 self.console.log(f"Unlisting project {proj_name}")
-                if not self.console.prompt_bool(f"   {self.__fmt_style('This operation will not delete any files, but will remove the project from the local registry. Continue?', 'bold gold1')} "):
+                if not self.console.prompt_bool(f"    {self.__fmt_style('This operation will not delete any files, but will remove the project from the local registry. Continue?', 'bold gold1')} "):
                     return 1
                 if proj_name not in self.config.obj["projects"]:
                     self.console.log(f"Error: could not find project '{proj_name}'")
@@ -773,15 +773,15 @@ class Modi:
         import rich.markup
         lines_arr = []
         try:
-            lbr = self.__fmt_style(pyfiglet.figlet_format("[", font=font), 'bold grey100')
+            lbr = pyfiglet.figlet_format("[", font=font)
         except pyfiglet.FontNotFound:
             self.console.log("Error: invalid PyFiglet font specified", mtype="error")
             return 1
-        m = self.__fmt_style(pyfiglet.figlet_format("M", font=font), 'bold sky_blue2')
-        o = self.__fmt_style(pyfiglet.figlet_format("O", font=font), 'bold light_sky_blue1')
-        d = self.__fmt_style(pyfiglet.figlet_format("D", font=font), 'bold plum1')
-        i = self.__fmt_style(pyfiglet.figlet_format("I", font=font), 'bold orchid2')
-        rbr = self.__fmt_style(pyfiglet.figlet_format("]", font=font), 'bold grey100')
+        m = pyfiglet.figlet_format("M", font=font)
+        o = pyfiglet.figlet_format("O", font=font)
+        d = pyfiglet.figlet_format("D", font=font)
+        i = pyfiglet.figlet_format("I", font=font)
+        rbr = pyfiglet.figlet_format("]", font=font)
         height = len(lbr.split("\n"))
         lbr = lbr.split("\n")
         m = m.split("\n")
@@ -791,7 +791,7 @@ class Modi:
         rbr = rbr.split("\n")
         print()
         for j in range(height):
-            lines_arr.append(f"{lbr[j]} {m[j]} {o[j]} {d[j]} {i[j]} {rbr[j]}")
+            lines_arr.append(f"[bold][grey100]{lbr[j]}[/grey100][sky_blue_2] {m[j]}[/sky_blue_2][light_sky_blue1] {o[j]}[/light_sky_blue1][plum1] {d[j]}[/plum1][orchid1] {i[j]}[/orchid1][grey100] {rbr[j]}[/grey100]")
         for line in lines_arr:
             self.console.log(line, mtype="info")
         return 0
