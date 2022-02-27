@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 from io import StringIO
 import glob
+import readline
 termtype = "plain"
 try:
     import rich
@@ -123,7 +124,7 @@ class Output:
             return return_value
 
     
-    def prompt(self, text, choices=[]):
+    def prompt(self, text, choices=[], password=False):
         choice = ""
         if(self.termtype == "plain"):
             if(len(choices) != 0):
@@ -135,9 +136,9 @@ class Output:
         else: 
             from rich.prompt import Prompt
             if(len(choices) == 0):
-                choice = Prompt.ask(f"    {text}")
+                choice = Prompt.ask(f"    {text}", password=password)
             else:
-                choice = Prompt.ask(f"    {text}", choices=choices)
+                choice = Prompt.ask(f"    {text}", choices=choices, password=password)
             return choice
 
     def shell_prompt(self):
@@ -183,6 +184,7 @@ class Modi:
         global termtype
         self.console = Output(termtype, loudness)
         self.termtype = termtype
+        self.logged_in = False
         try:
             file = open(f"{self.env_home}/.modi.json", "r")
             file.close()
@@ -255,6 +257,125 @@ class Modi:
                 self.console.log("Error: could not download and import module", mtype="error")
                 return 1
             return 0
+
+    def remote(self, args, shell=False):
+        import requests
+        if(len(args) == 0):
+            self.console.log("Error: no valid command specified", mtype="error")
+            return 1
+        if("remote" not in self.config.obj.keys() and args[0] != "set"):
+            self.console.log(f"You have not yet specified a remote to use. Please run {self.__fmt_code('modi.py remote set <url>')} first to select a remote repository.", mtype="error")
+            return 1
+        if(args[0] == "set"):
+            if(len(args) < 2):
+                return 1
+            self.config.obj["remote"] = args[1]
+            self.config.write()
+            self.console.log(f"Set remote URL to {self.config.obj['remote']}")
+        if(args[0] == "authenticate" and shell):
+            self.logged_in = False
+            username = ""
+            password = ""
+            if(len(args) > 1):
+                if(args[1] == "logout"):
+                    try:
+                        self.console.log(f'Logged out user \'{self.config.obj["auth"]["username"]}\'', mtype="completion")
+                        self.config.obj['auth'] = {}
+                        self.logged_in = False
+                        self.config.write()
+                    except KeyError:
+                        self.console.log(f'No logged-in user found, nothing to do...', mtype='warning')
+                        return 1
+                    return 0
+            try:
+                self.console.log(f"Logging in to remote {self.config.obj['remote']}")
+                while not self.logged_in:
+                    username = self.console.prompt(f"{self.__fmt_style('Enter username', 'bold gold1')}")
+                    password = self.console.prompt(f"{self.__fmt_style('Enter password', 'bold light_sky_blue1')}", password=True)
+                    url = f"{self.config.obj['remote']}/login/{username.strip()}"
+                    headers = {'Authorization': password.strip()}
+                    res = requests.get(url, headers=headers)
+                    json_res = res.json()
+                    if(res.status_code == 401):
+                        self.console.log("Authentication unsuccessful. Try again or use ^C (Ctrl-C) to exit.", mtype="warning")
+                    elif(res.status_code == 200):
+                        self.console.log(f"Authentication successful, you are now logged in to '{self.config.obj['remote']}' as {self.__fmt_style(username, 'bold light_sky_blue1')}")
+                        self.logged_in = True
+                        self.config.obj['auth'] = {}
+                        self.config.obj['auth']['username'] = username
+                        self.config.obj['auth']['token'] = json_res['auth_code']
+                        self.config.write()
+            except KeyboardInterrupt:
+                print()
+                return 1
+        elif(args[0] == "authenticate" and not shell):
+            self.console.log("For security reasons, authentication from command-line is not supported", mtype="error")
+            self.console.log(f"Please launch Modi Shell with {self.__fmt_code('modi.py shell')}, and run {self.__fmt_code('remote authenticate')} to log in.", mtype="error")
+            return 1
+        
+        elif(args[0] == "publish"):
+            if(len(args) <= 1):
+                return 1
+            start_time = time.perf_counter()
+            package_name = args[1]
+            valid_files = []
+            cwd = Path(os.getcwd())
+            for file in os.listdir(Path("./")):
+                if package_name in file.split(".")[0] and file.split(".")[len(file.split(".")) - 1] in ["gz", "pkg", "zip"]:
+                    valid_files.append(file)
+            if(len(valid_files) == 0):
+                self.console.log(f"Error: Could not find package '{package_name}' in current directory", mtype="error")
+                return 1
+            correct_file = ""
+            current_dir = os.listdir(cwd)
+
+            if(len(valid_files) > 1):
+                self.console.log("There were multiple valid files to install", mtype="warning")
+                correct_file = valid_files[self.console.prompt_selection(f"    Please select {self.__fmt_style('one', 'bold')}", valid_files) - 1]
+            else:
+                correct_file = valid_files[0]
+
+            self.console.log(f"Uploading package {self.__fmt_style(correct_file, 'bold orchid1')} to {self.config.obj['remote']}")
+            file_hdl = open(correct_file, 'rb')
+            files = {'file': file_hdl.read()}
+            url = f"{self.config.obj['remote']}/upload/{package_name}"
+            headers = {'Authorization': self.config.obj['auth']['token'], 'X-Modi-Username': self.config.obj['auth']['username']}
+            res = requests.put(url, files=files, headers=headers)
+            rich.print(res)
+            finish_time = time.perf_counter()
+            total_time = str(round(finish_time - start_time, 1))
+
+            if(res.status_code == 401):
+                self.console.log("Error: invalid authorisation token. Please logout and back in", mtype="error")
+                return 1
+            elif(res.status_code == 200):
+                self.console.log(f"Successfully uploaded package {self.__fmt_style(correct_file, 'bold orchid1')} to remote {self.config.obj['remote']} in {total_time} seconds", mtype="completion")
+                return 0
+            else:
+                self.console.log("Error: An unknown error occurred while uploading a package", mtype="error")
+                return 1
+        elif(args[0] == "bootstrap"):
+            if(len(args) <= 1):
+                return 1
+            start_time = time.perf_counter()
+            package_name = args[1]
+            
+            url = f"{self.config.obj['remote']}/package/{package_name}"
+            self.console.log(f"Downloading package '{package_name}' from remote")
+            res = requests.get(url)
+
+            if(res.status_code == 404):
+                self.console.log(f"Error: could not find package '{package_name}' in remote {self.config.obj['remote']}", mtype="error")
+                return 1
+            
+            with open(f"{package_name}.modi.pkg", 'wb') as pkg:
+                pkg.write(res.content)
+            finish_time = time.perf_counter()
+            total_time = str(round(finish_time - start_time, 1))
+            self.console.log(f"Successfully downloaded package {self.__fmt_style(package_name, 'bold light_sky_blue1')} from remote {self.config.obj['remote']} in {total_time} seconds", mtype="completion")
+            return self.bootstrap(package_name, project_name=package_name)
+            
+            
 
     def gui(self, args):
         if(len(args) == 0):
@@ -896,6 +1017,8 @@ class Modi:
                 self.logo(font=args[1])
             else:
                 self.logo()
+        elif(args[0] == "remote"):
+            self.remote(args[1:], shell=shell)
         elif(args[0] == "build"):
             self.build(args[1:])
         elif(args[0] == "bootstrap" or args[0] == "setup"):
@@ -1112,8 +1235,11 @@ class Modi:
                 os.remove(Path(f"{cwd}/{file}"))
             except IsADirectoryError:
                 shutil.rmtree(Path(f"{cwd}/{file}"))
+            except PermissionError:
+                self.console.log("Could not remove file {file} because of a permissions error", mtype="warning")
+                pass
         if(Path(os.getcwd()) == cwd):
-            shutil.copy(Path(f"{cwd}/modi.py"), Path("{cwd}/modi.py.bak"))
+            shutil.copy(Path(f"{cwd}/modi.py"), Path(f"{cwd}/modi.py.bak"))
 
         file_style_string = self.__fmt_style(correct_file, 'bold orchid1')
         package_style_string = self.__fmt_style(package_name, 'bold light_sky_blue1')
@@ -1142,7 +1268,7 @@ class Modi:
 
         shutil.rmtree(Path(f"{cwd}/{package_name}"))
         if(Path(os.getcwd()) == cwd):
-            shutil.copy(Path(f"{cwd}/modi.py.bak"), Path("{cwd}/modi.py"))
+            shutil.copy(Path(f"{cwd}/modi.py.bak"), Path(f"{cwd}/modi.py"))
             os.remove(Path(f"{cwd}/modi.py.bak"))
 
         if(file_ext == "pkg"):
