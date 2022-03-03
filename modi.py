@@ -29,6 +29,7 @@ from io import StringIO
 import glob
 import readline
 termtype = "plain"
+modi_version = "v0.7.2"
 try:
     import rich
     import rich.progress
@@ -208,15 +209,15 @@ class Modi:
            pass 
         elif(mode == "interactive"): 
             if(self.termtype == "rich"):
-                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.7.1")
+                rich.print(f"    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] {modi_version}")
             else:
-                print("    Starting MODI v0.7.1")
+                print(f"    Starting MODI {modi_version}")
             self.parseargs(args)
         elif(mode == "shell"):
             if(self.termtype == "rich"):
-                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.7.1")
+                rich.print(f"    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] {modi_version}")
             else:
-                print("    Starting MODI v0.7.1")
+                print(f"    Starting MODI {modi_version}")
             self.shell()
         
 
@@ -1308,6 +1309,10 @@ class Modi:
             if(Path(os.getcwd()) == cwd):
                 shutil.copy(Path(f"{cwd}/modi.py.bak"), Path(f"{cwd}/modi.py"))
                 os.remove(Path(f"{cwd}/modi.py.bak"))
+        try:
+            os.chmod("modi.py", 0o755)
+        except:
+            pass
 
         if(file_ext == "pkg"):
             try:

@@ -41,6 +41,7 @@ if(input("    Install optional dependencies 'numpy' and 'PyQt6' for 'gui_minimal
     except:
         print("    Error: failed to import the Modi library. Maybe it didn't download correctly?")
         sys.exit(1)
-
+print("    Setting Modi default remote...")
+subprocess.run([sys.executable, "./modi.py", "remote", "set", "https://modi.jacobtye.dev"])
 if(input("    Done installing Modi. Make sure to run 'modi self sync' to update.\n    Start a shell now? [Y/n]: ").lower() in ["y", ""]):
     subprocess.run([f"{sys.executable}", "./modi.py", "shell"])
