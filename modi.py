@@ -208,15 +208,15 @@ class Modi:
            pass 
         elif(mode == "interactive"): 
             if(self.termtype == "rich"):
-                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.7")
+                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.7.1")
             else:
-                print("    Starting MODI v0.7")
+                print("    Starting MODI v0.7.1")
             self.parseargs(args)
         elif(mode == "shell"):
             if(self.termtype == "rich"):
-                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.7")
+                rich.print("    Starting [bold][sky_blue2]M[/sky_blue2][light_sky_blue1]O[/light_sky_blue1][plum1]D[/plum1][orchid2]I[/orchid2][/bold] v0.7.1")
             else:
-                print("    Starting MODI v0.7")
+                print("    Starting MODI v0.7.1")
             self.shell()
         
 
@@ -621,7 +621,7 @@ class Modi:
             print()
             self.console.log("Bye!", mtype="completion")
 
-    def install_local(self, args, return_deps=False, no_projects=True, add_reqs=True):
+    def install_local(self, args, return_deps=False, no_projects=True, add_reqs=False):
         """Wrap Modi.install to install local packages more easily
         
         Args:
@@ -649,7 +649,7 @@ class Modi:
                     if pkg not in current_deps:
                         current_deps.append(pkg)
                 for dep in current_deps:
-                    req_file.write(dep + "\n")
+                    req_file.write(dep)
 
         inst_args = ["local"]
 
@@ -1037,6 +1037,9 @@ class Modi:
             self.cd(args[1])
         elif((args[0] == "heat") and shell):
             self.heat(args[1:])
+        elif(args[0] == "self" and len(args) > 1):
+            if(args[1] == "sync"):
+                self.sync('modi')
         else:
             self.console.log("Error: no valid operation specified", mtype="error")
             return 1
@@ -1182,7 +1185,36 @@ class Modi:
         self.console.log(f"Finished building package {style_string} in {total_time} seconds", mtype="completion")
         return 0
 
-    def bootstrap(self, package_name, cwd="", project_name=""):
+    def sync(self, package_name):
+        import requests
+        """Update a package from Modi Cloud
+
+        Args:
+            package_name (str): the name of the package to install from remtoe
+
+        Returns:
+            0: if the package installed successfully
+            1: if there was an error during extraction
+        """
+        start_time = time.perf_counter()
+        
+        url = f"{self.config.obj['remote']}/package/{package_name}"
+        self.console.log(f"Downloading package '{package_name}' from remote")
+        res = requests.get(url)
+
+        if(res.status_code == 404):
+            self.console.log(f"Error: could not find package '{package_name}' in remote {self.config.obj['remote']}", mtype="error")
+            return 1
+        
+        with open(f"{package_name}.modi.pkg", 'wb') as pkg:
+            pkg.write(res.content)
+        finish_time = time.perf_counter()
+        total_time = str(round(finish_time - start_time, 1))
+        self.console.log(f"Successfully downloaded package {self.__fmt_style(package_name, 'bold light_sky_blue1')} from remote {self.config.obj['remote']} in {total_time} seconds", mtype="completion")
+        return self.bootstrap(package_name, cleanup=False)
+
+
+    def bootstrap(self, package_name, cwd="", project_name="", cleanup=True):
         """Bootstrap a project from a .zip, .tar.gz or (ideally) .modi.pkg file to the CWD
         
         Args:
@@ -1223,23 +1255,23 @@ class Modi:
         else:
             correct_file = valid_files[0]
 
-        if(len(current_dir) > 0):
+        if(len(current_dir) > 0 and cleanup):
             self.console.log(f"The directory {cwd} contains files other than modi.py and packages.", mtype="warning") 
             self.console.log("If you choose to continue, they will be deleted.", mtype="warning")
             choice = self.console.prompt_bool("    Continue?")
             if(not choice):
                 return 1
-
-        for file in current_dir:
-            try:
-                os.remove(Path(f"{cwd}/{file}"))
-            except IsADirectoryError:
-                shutil.rmtree(Path(f"{cwd}/{file}"))
-            except PermissionError:
-                self.console.log("Could not remove file {file} because of a permissions error", mtype="warning")
-                pass
-        if(Path(os.getcwd()) == cwd):
-            shutil.copy(Path(f"{cwd}/modi.py"), Path(f"{cwd}/modi.py.bak"))
+        if cleanup:
+            for file in current_dir:
+                try:
+                    os.remove(Path(f"{cwd}/{file}"))
+                except IsADirectoryError:
+                    shutil.rmtree(Path(f"{cwd}/{file}"))
+                except PermissionError:
+                    self.console.log("Could not remove file {file} because of a permissions error", mtype="warning")
+                    pass
+            if(Path(os.getcwd()) == cwd):
+                shutil.copy(Path(f"{cwd}/modi.py"), Path(f"{cwd}/modi.py.bak"))
 
         file_style_string = self.__fmt_style(correct_file, 'bold orchid1')
         package_style_string = self.__fmt_style(package_name, 'bold light_sky_blue1')
@@ -1261,15 +1293,21 @@ class Modi:
                 self.console.log(f"{self.__fmt_style('Tar-GZ archive', 'bold gold1')} selected, cannot auto-generate requirements.txt", mtype="warning")
 
         for file in os.listdir(Path(f"{cwd}/{package_name}")):
+            if os.path.exists(Path(f"{cwd}/{file}")):
+                try:
+                    shutil.rmtree(Path(f"{cwd}/{file}"))
+                except NotADirectoryError:
+                    os.remove(Path(f"{cwd}/{file}"))
             try:
                 shutil.copytree(Path(f"{cwd}/{package_name}/{file}"), Path(f"{cwd}/{file}"))
             except NotADirectoryError:
                 shutil.copy(Path(f"{cwd}/{package_name}/{file}"), Path(f"{cwd}/{file}")) 
 
         shutil.rmtree(Path(f"{cwd}/{package_name}"))
-        if(Path(os.getcwd()) == cwd):
-            shutil.copy(Path(f"{cwd}/modi.py.bak"), Path(f"{cwd}/modi.py"))
-            os.remove(Path(f"{cwd}/modi.py.bak"))
+        if cleanup:
+            if(Path(os.getcwd()) == cwd):
+                shutil.copy(Path(f"{cwd}/modi.py.bak"), Path(f"{cwd}/modi.py"))
+                os.remove(Path(f"{cwd}/modi.py.bak"))
 
         if(file_ext == "pkg"):
             try:
@@ -1280,23 +1318,29 @@ class Modi:
         if(project_name != ""):
             file_meta["pkg_name"] = project_name.replace(' ', '-')
             file_meta["pkg_fullname"] = project_name
-        with open(Path(f"{cwd}/modi.meta.json"), "w") as meta_file:
-            meta_file.write(json.dumps(file_meta, indent=4))
+        if cleanup:
+            with open(Path(f"{cwd}/modi.meta.json"), "w") as meta_file:
+                meta_file.write(json.dumps(file_meta, indent=4))
         final_deps = [*file_meta["dependencies"]]
-        if(file_meta != ""):
-            with open(Path(f"{cwd}/requirements.txt"), "w") as req_file:
-                for dep in final_deps:
-                    req_file.write(dep + "\n")
+        if cleanup:
+            if(file_meta != ""):
+                with open(Path(f"{cwd}/requirements.txt"), "w") as req_file:
+                    for dep in final_deps:
+                        print(final_deps)
+                        req_file.write(dep)
         finish_time = time.perf_counter()
         total_time = round(finish_time - start_time, 1)
         print_string = ""
+        verb = "bootstrapped"
+        if not cleanup:
+            verb = "synced"
         if(file_ext == "pkg" and project_name != ""):
             proj_string = self.__fmt_style(project_name, 'bold light_sky_blue1')
-            print_string = f"Successfully bootstrapped package '{package_name}' and {len(final_deps)} dependencies into project {proj_string} in {total_time} seconds"
+            print_string = f"Successfully {verb} package '{package_name}' and {len(final_deps)} dependencies into project {proj_string} in {total_time} seconds"
         elif(file_ext == "pkg"):
-            print_string = f"Successfully bootstrapped package '{package_name}' and {len(final_deps)} dependencies in {total_time} seconds"
+            print_string = f"Successfully {verb} package '{package_name}' and {len(final_deps)} dependencies in {total_time} seconds"
         else:
-            print_string = f"Successfully bootstrapped package {package_name} and all dependencies in {total_time} seconds"
+            print_string = f"Successfully {verb} package {package_name} and all dependencies in {total_time} seconds"
         self.console.log(print_string, mtype="completion")
         return 0
         
