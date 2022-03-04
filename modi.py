@@ -342,7 +342,6 @@ class Modi:
             url = f"{self.config.obj['remote']}/upload/{package_name}"
             headers = {'Authorization': self.config.obj['auth']['token'], 'X-Modi-Username': self.config.obj['auth']['username']}
             res = requests.put(url, files=files, headers=headers)
-            rich.print(res)
             finish_time = time.perf_counter()
             total_time = str(round(finish_time - start_time, 1))
 
