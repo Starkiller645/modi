@@ -1101,7 +1101,7 @@ class Modi:
                 final_dirs.append(file)
         if(requires_modi):
             final_dirs.append(Path("./modi.py"))
-            print(final_dirs)
+        print(final_dirs)
         if(pkg_name == ""):
             if(self.termtype == "rich"):
                 pkg_name = self.console.prompt("[bold gold1]Enter a package name[/bold gold1]").replace(" ", "-")
