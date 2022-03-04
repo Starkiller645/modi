@@ -13,6 +13,7 @@ Typical usage example:
     modi_instance.install(["rich", "PyQt5", "colorama"]) # installs multiple pkgs to CWD
     modi_instance.build("freeze") # builds a zip-file from installed packages and python files
 
+:x-modi-build-requires:
 """
 
 import json
@@ -1099,9 +1100,10 @@ class Modi:
                     if("import modi" in fd.read()):
                         requires_modi = True
                 final_dirs.append(file)
+            if(':x-modi-build-requires:' in open(file, 'r').read()):
+                requires_modi = True
         if(requires_modi):
             final_dirs.append("./modi.py")
-        print(final_dirs)
         if(pkg_name == ""):
             if(self.termtype == "rich"):
                 pkg_name = self.console.prompt("[bold gold1]Enter a package name[/bold gold1]").replace(" ", "-")
