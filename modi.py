@@ -31,7 +31,7 @@ from io import StringIO
 import glob
 import readline
 termtype = "plain"
-modi_version = "v0.7.4"
+modi_version = "v0.7.5"
 try:
     import rich
     import rich.progress
@@ -1301,7 +1301,14 @@ class Modi:
             if(file_ext != "pkg"):
                 self.console.log(f"{self.__fmt_style('Tar-GZ archive', 'bold gold1')} selected, cannot auto-generate requirements.txt", mtype="warning")
 
-        for file in os.listdir(Path(f"{cwd}/{package_name}")):
+        pkg_contents = []
+        pkg_name_bak = package_name
+        if(os.path.exists(Path(f"{cwd}/{package_name}"))):
+            pkg_contents = os.listdir(Path(f"{cwd}/{package_name}"))
+        elif(os.path.exists(Path(f"{cwd}/{package_name}.modi_build"))):
+            pkg_contents = os.listdir(Path(f"{cwd}/{package_name}.modi_build"))
+            package_name = f"{package_name}.modi_build"
+        for file in pkg_contents:
             if os.path.exists(Path(f"{cwd}/{file}")):
                 try:
                     shutil.rmtree(Path(f"{cwd}/{file}"))
@@ -1313,6 +1320,7 @@ class Modi:
                 shutil.copy(Path(f"{cwd}/{package_name}/{file}"), Path(f"{cwd}/{file}")) 
 
         shutil.rmtree(Path(f"{cwd}/{package_name}"))
+        package_name = pkg_name_bak
         if cleanup:
             if(Path(os.getcwd()) == cwd):
                 shutil.copy(Path(f"{cwd}/modi.py.bak"), Path(f"{cwd}/modi.py"))
