@@ -24,12 +24,13 @@ import tarfile
 import re
 import shutil
 import time
+import requests
 from pathlib import Path
 from io import StringIO
 import glob
 import readline
 termtype = "plain"
-modi_version = "v0.7.2"
+modi_version = "v0.7.3"
 try:
     import rich
     import rich.progress
@@ -204,7 +205,7 @@ class Modi:
         else:
             self.windows = False
             self.site_prefix = f"/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/"
-        
+
         if(mode == "module"):
            pass 
         elif(mode == "interactive"): 
@@ -362,14 +363,7 @@ class Modi:
             
             url = f"{self.config.obj['remote']}/package/{package_name}"
             self.console.log(f"Downloading package '{package_name}' from remote")
-            res = requests.get(url)
-
-            if(res.status_code == 404):
-                self.console.log(f"Error: could not find package '{package_name}' in remote {self.config.obj['remote']}", mtype="error")
-                return 1
-            
-            with open(f"{package_name}.modi.pkg", 'wb') as pkg:
-                pkg.write(res.content)
+            self.__download_progress(url)
             finish_time = time.perf_counter()
             total_time = str(round(finish_time - start_time, 1))
             self.console.log(f"Successfully downloaded package {self.__fmt_style(package_name, 'bold light_sky_blue1')} from remote {self.config.obj['remote']} in {total_time} seconds", mtype="completion")
@@ -1414,6 +1408,35 @@ class Modi:
     # PRIVATE methods. These should NOT be called directly, they will be invoked when needed
     # | | |
     # v v v
+
+    def __download_progress(self, url, file=None):
+        pkg_name = url.split('/')[len(url.split('/')) - 1]
+        if file != None:
+            filename = file
+        else:
+            filename = pkg_name + ".modi.pkg"
+
+        if(self.termtype == "rich"):
+            res = requests.get(url, stream=True)
+            with open(filename, 'wb') as fd:
+                for chunk in rich.progress.track(res.iter_content(chunk_size=128), description=f"Downloading {self.__fmt_style(pkg_name, 'bold orchid1')}...", total=int(res.headers['Content-Length']) / 128):
+                    fd.write(chunk)
+        else:
+            res = requests.get(url, stream=True)
+            prev_blocks = 0
+            blocks_done = 0
+            blocks_todo = 50
+            chunks_total = int(res.headers['Content-Length']) / 128
+            chunks_done = 0
+            sys.stdout.write(f"Downloading '{pkg_name}': [{'█' * blocks_done}{' ' * blocks_todo}] {blocks_done * 2}%")
+            with open(filename, 'wb') as fd:
+                for chunk in res.iter_content(chunk_size=128):
+                    chunks_done += 1
+                    blocks_done = int((chunks_done / chunks_total) * 50)
+                    blocks_todo = 50 - blocks_done
+                    if prev_blocks != blocks_done:
+                        prev_blocks = blocks_done
+                        sys.stdout.write(f"\rDownloading '{pkg_name}': [{'█' * blocks_done}{' ' * blocks_todo}] {blocks_done * 2}%\r")
 
     def __zip_recursive(self, path, zip_handle):
         for root, dirs, files in os.walk(path):
