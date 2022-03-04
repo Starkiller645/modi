@@ -1323,15 +1323,15 @@ class Modi:
         if(project_name != ""):
             file_meta["pkg_name"] = project_name.replace(' ', '-')
             file_meta["pkg_fullname"] = project_name
-        if cleanup:
+        if not cleanup:
             with open(Path(f"{cwd}/modi.meta.json"), "w") as meta_file:
                 meta_file.write(json.dumps(file_meta, indent=4))
+        os.remove(correct_file)
         final_deps = [*file_meta["dependencies"]]
         if cleanup:
             if(file_meta != ""):
                 with open(Path(f"{cwd}/requirements.txt"), "w") as req_file:
                     for dep in final_deps:
-                        print(final_deps)
                         req_file.write(dep)
         finish_time = time.perf_counter()
         total_time = round(finish_time - start_time, 1)
