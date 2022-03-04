@@ -1116,7 +1116,12 @@ class Modi:
             prog_bar = ""
             self.console.log(f"Mode 'tar' selected, building compressed package...")
             import tarfile
-            os.mkdir(Path(f"./{pkg_name}"))
+            filename = pkg_name
+            try:
+                os.mkdir(Path(f"./{pkg_name}"))
+            except FileExistsError:
+                pkg_name = f"{pkg_name}.modi-build"
+                os.mkdir(Path(f"./{pkg_name}"))
             for file in final_dirs:
                 try:
                     shutil.copy(Path(f"./{file}"), Path(f"./{pkg_name}/{file}"))
@@ -1125,7 +1130,7 @@ class Modi:
                         shutil.copytree(Path(f"./{file}"), Path(f"./{pkg_name}/{file}"))
                     except:
                         self.console.log(f"Could not copy file '{file}' to compressed archive, skipping", mtype="warning")
-            tar = tarfile.open(Path(f"./{pkg_name}.tar.gz"), 'w:gz', compresslevel=4)
+            tar = tarfile.open(Path(f"./{filename}.tar.gz"), 'w:gz', compresslevel=4)
             tar.add(Path(f"./{pkg_name}"))
             tar.close()
             shutil.rmtree(Path(f"./{pkg_name}"))
@@ -1133,7 +1138,13 @@ class Modi:
         elif(pkg_type == "zip"):
             self.console.log("Mode 'zip' selected, building compressed package...")
             import zipfile
-            os.mkdir(Path(f"./{pkg_name}"))
+            filename = pkg_name
+            try:
+                os.mkdir(Path(f"./{pkg_name}"))
+            except FileExistsError:
+                pkg_name = f"{pkg_name}.modi-build"
+                os.mkdir(Path(f"./{pkg_name}"))
+
             for file in final_dirs:
                 try:
                     shutil.copy(Path(f"./{file}"), Path(f"./{pkg_name}/{file}"))
@@ -1142,14 +1153,19 @@ class Modi:
                         shutil.copytree(Path(f"./{file}"), Path(f"./{pkg_name}/{file}"))
                     except:
                         self.console.log(f"Could not copy file '{file}' to compressed archive, skipping", mtype="warning")
-            zip_file = zipfile.ZipFile(Path(f"./{pkg_name}.zip"), mode="w")
+            zip_file = zipfile.ZipFile(Path(f"./{filename}.zip"), mode="w")
             self.__zip_recursive(str(Path(f"./{pkg_name}")), zip_file)
             zip_file.close()
             shutil.rmtree(Path(f"./{pkg_name}"))
         elif(pkg_type == "modi"):
             self.console.log(f"Mode 'modi' selected, building compressed MODI package...")
             import tarfile
-            os.mkdir(Path(f"./{pkg_name}"))
+            try:
+                os.mkdir(Path(f"./{pkg_name}"))
+            except FileExistsError:
+                pkg_name = f"{pkg_name}.modi_build"
+                os.mkdir(Path(f"./{pkg_name}"))
+
             meta_obj = {"pkg_name": pkg_name, "dependencies": [*final_pkgs]}
             json_obj = json.dumps(meta_obj, sort_keys=True, indent=4)
             if(not os.path.exists(Path("./modi.meta.json"))):
@@ -1166,7 +1182,7 @@ class Modi:
                         shutil.copytree(Path(f"./{file}"), Path(f"./{pkg_name}/{file}"))
                     except:
                         self.console.log(f"Could not copy file '{file}' to compressed archive, skipping", mtype="warning")
-            tar = tarfile.open(Path(f"./{pkg_name}.modi.pkg"), 'w:gz', compresslevel=4)
+            tar = tarfile.open(Path(f"./{filename}.modi.pkg"), 'w:gz', compresslevel=4)
             tar.add(Path(f"./{pkg_name}"))
             tar.close()
             shutil.rmtree(Path(f"./{pkg_name}"))
