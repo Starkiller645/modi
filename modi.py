@@ -1197,14 +1197,7 @@ class Modi:
         
         url = f"{self.config.obj['remote']}/package/{package_name}"
         self.console.log(f"Downloading package '{package_name}' from remote")
-        res = requests.get(url)
-
-        if(res.status_code == 404):
-            self.console.log(f"Error: could not find package '{package_name}' in remote {self.config.obj['remote']}", mtype="error")
-            return 1
-        
-        with open(f"{package_name}.modi.pkg", 'wb') as pkg:
-            pkg.write(res.content)
+        self.__download_progress(url)
         finish_time = time.perf_counter()
         total_time = str(round(finish_time - start_time, 1))
         self.console.log(f"Successfully downloaded package {self.__fmt_style(package_name, 'bold light_sky_blue1')} from remote {self.config.obj['remote']} in {total_time} seconds", mtype="completion")
