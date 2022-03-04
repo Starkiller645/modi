@@ -31,7 +31,7 @@ from io import StringIO
 import glob
 import readline
 termtype = "plain"
-modi_version = "v0.7.3"
+modi_version = "v0.7.4"
 try:
     import rich
     import rich.progress
