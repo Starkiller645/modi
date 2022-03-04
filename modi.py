@@ -1099,8 +1099,11 @@ class Modi:
                         requires_modi = True
                 final_dirs.append(file)
             elif(not os.path.isdir(f"./{file}")):
-                if(':x-modi-build-requires:' in open(file, 'r').read()):
-                    requires_modi = True
+                try:
+                    if(':x-modi-build-requires:' in open(file, 'r').read()):
+                        requires_modi = True
+                except UnicodeDecodeError:
+                    pass
         if(requires_modi):
             final_dirs.append("./modi.py")
         if(pkg_name == ""):
