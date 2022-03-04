@@ -1094,13 +1094,13 @@ class Modi:
         for file in current_working_dir:
             if(os.path.isdir(Path(f"./{file}")) and not (file[0] == "." or file[0] == "_")):
                 final_dirs.append(file)
-            if("py" in file.split(".")[1:] and "modi" not in file.split(".")[0] and file[0] != "."):
+            elif("py" in file.split(".")[1:] and "modi" not in file.split(".")[0] and file[0] != "."):
                 self.console.log(file)
                 with open(Path(file), "r") as fd:
                     if("import modi" in fd.read()):
                         requires_modi = True
                 final_dirs.append(file)
-            if(':x-modi-build-requires:' in open(file, 'r').read()):
+            elif(':x-modi-build-requires:' in open(file, 'r').read()):
                 requires_modi = True
         if(requires_modi):
             final_dirs.append("./modi.py")
