@@ -1100,7 +1100,7 @@ class Modi:
                         requires_modi = True
                 final_dirs.append(file)
         if(requires_modi):
-            final_dirs.append(Path("./modi.py"))
+            final_dirs.append("./modi.py")
         print(final_dirs)
         if(pkg_name == ""):
             if(self.termtype == "rich"):
