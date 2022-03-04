@@ -1160,6 +1160,7 @@ class Modi:
         elif(pkg_type == "modi"):
             self.console.log(f"Mode 'modi' selected, building compressed MODI package...")
             import tarfile
+            filename = pkg_name
             try:
                 os.mkdir(Path(f"./{pkg_name}"))
             except FileExistsError:
