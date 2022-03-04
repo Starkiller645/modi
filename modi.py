@@ -369,8 +369,6 @@ class Modi:
             total_time = str(round(finish_time - start_time, 1))
             self.console.log(f"Successfully downloaded package {self.__fmt_style(package_name, 'bold light_sky_blue1')} from remote {self.config.obj['remote']} in {total_time} seconds", mtype="completion")
             return self.bootstrap(package_name, project_name=package_name)
-            
-            
 
     def gui(self, args):
         if(len(args) == 0):
@@ -1415,7 +1413,7 @@ class Modi:
         if(self.termtype == "rich"):
             res = requests.get(url, stream=True)
             with open(filename, 'wb') as fd:
-                for chunk in rich.progress.track(res.iter_content(chunk_size=128), description=f"Downloading {self.__fmt_style(pkg_name, 'bold orchid1')}...", total=int(res.headers['Content-Length']) / 128):
+                for chunk in rich.progress.track(res.iter_content(chunk_size=128), description=f"    Downloading {self.__fmt_style(pkg_name, 'bold orchid1')}...", total=int(res.headers['Content-Length']) / 128):
                     fd.write(chunk)
         else:
             res = requests.get(url, stream=True)
@@ -1424,7 +1422,7 @@ class Modi:
             blocks_todo = 50
             chunks_total = int(res.headers['Content-Length']) / 128
             chunks_done = 0
-            sys.stdout.write(f"Downloading '{pkg_name}': [{'█' * blocks_done}{' ' * blocks_todo}] {blocks_done * 2}%")
+            sys.stdout.write(f"    Downloading '{pkg_name}': [{'█' * blocks_done}{' ' * blocks_todo}] {blocks_done * 2}%")
             with open(filename, 'wb') as fd:
                 for chunk in res.iter_content(chunk_size=128):
                     chunks_done += 1
