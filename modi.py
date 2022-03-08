@@ -430,9 +430,9 @@ class Modi:
             elif(len(args) == 2):
                 project_name = args[1]
                 project_dir = str(Path(os.getcwd()))
-            elif(args[2] != "from"):
+            elif(args[2] != "from" and args[2] == "in" and len(args) > 3):
                 project_name = args[1]
-                project_dir = str(Path(args[2]))
+                project_dir = str(Path(args[3]))
             else:
                 project_name = args[1]
                 project_dir = str(Path(os.getcwd()))
@@ -487,6 +487,18 @@ class Modi:
 
             style_string = self.__fmt_style(project_name, 'bold light_sky_blue1')
             self.console.log(f"Created project {style_string} in {project_dir}", mtype="completion")
+            try:
+                path = Path(self.config.obj["projects"][project_ident]["directory"])
+            except:
+                return 1
+            try:
+                self.cd(path)
+            except FileNotFoundError:
+                self.console.log(f"Error: broken project; could not change directory to {path}.", mtype="error")
+                return 1
+            self.console.project = project_ident
+            return 0
+
             if("bootstrap" not in args):
                 return 0
         
@@ -825,12 +837,18 @@ class Modi:
             name (str): the name of a command to help with. Defaults to "", which shows basic help
         """
         self.console.log(f"{self.__fmt_style('MODI Help:', 'bold')}", mtype="info")
-        if name not in ["install", "help", "remove", "build", "bootstrap", "setup", "project", "shell"]:
-            self.console.log(f"- {self.__fmt_code('modi.py install [args]')}  : Installs one or more packages", mtype="info")
+        if name not in ["install", "help", "remove", "build", "bootstrap", "project", "shell", "remote", "setup", "add", "gui", "self", "demo", "logo"]:
+            self.console.log(f"- {self.__fmt_code('modi.py install [args]')}  : Install one or more packages", mtype="info")
             self.console.log(f"- {self.__fmt_code('modi.py build [args]')}    : Build a Modi package in the CWD", mtype="info")
-            self.console.log(f"- {self.__fmt_code('modi.py bootstrap [args]')}: Bootstraps a directory from the contents of a Modi package", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py bootstrap [args]')}: Bootstrap a directory from the contents of a Modi package", mtype="info")
             self.console.log(f"- {self.__fmt_code('modi.py project [args]')}  : Create, manage, bootstrap and delete Modi projects", mtype="info")
-            self.console.log(f"- {self.__fmt_code('modi.py help [cmd]')}      : Shows the help page, either this or the detailed view for cmd", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py remote [args]')}   : Run Modi Cloud commands, for managing remote content", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py shell')}           : Start an interactive shell to run multiple Modi commands", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py demo')}            : Run a simple demo of Modi's capabilities", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py self [args]')}     : Run common commands that modify Modi itself", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py gui [args]')}      : Launch the Modi GUI, for easier package management", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py add [args]')}      : Install one or more packages and add to project requirements", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py help [cmd]')}      : Shows the help page, either this or the detailed view for [cmd]", mtype="info")
         elif name == "install":
             self.console.log(f"- {self.__fmt_code('modi.py install <package> [package] [...]')}         : Installs one or more packages to the global MODI cache (by default @ ~/.modi_cache)", mtype="info")
             self.console.log(f"  > {self.__fmt_code('modi.py install @<package> [package] [...]')}      : Same as above, but forcing use of the setuptools install method. Use if the previous option isn't working.", mtype="info")
@@ -841,20 +859,21 @@ class Modi:
             self.console.log(f"  > {self.__fmt_code('modi.py remove local <package> [package] [...]')}: Removes one or more packages from the current working directory.", mtype="info")
             self.console.log(f"  > {self.__fmt_code('modi.py remove local all')}                      : Removes all packages and subdirectories in the CWD, leaving only python files (and some special directories such as `.git`", mtype="info")
         elif name == "build":
-            self.console.log(f"- {self.__fmt_code('modi.py build freeze <output type> [pkg_name]')} : Builds a compressed archive in the format <output type> (either 'tar' or 'zip') from the contents of the CWD. The pkg_name will be prompted if it is not given", mtype="info")
-            self.console.log(f"- {self.__fmt_code('modi.py build auto <output type> [pkg_name]')}  : Builds a compressed archive in the format <output type> (either 'tar' or 'zip') from the list of requirements in ./requirements.txt", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py build freeze <output_type> [pkg_name]')} : Builds a compressed archive in the format <output_type> ('tar', 'zip' or 'modi' - 'modi' is preferred) from the contents of the CWD. The pkg_name will be prompted if it is not given", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py build auto <output_type> [pkg_name]')}  : Builds a compressed archive in the format <output_type> ('tar', 'zip' or 'modi' - 'modi' is preferred) from the list of requirements in ./requirements.txt", mtype="info")
         elif name == "project":
-            self.console.log(f"- {self.__fmt_code('modi.py project create [name] [directory]')}               : Creates a new project in the directory [directory] (if given, otherwise in CWD). The name will be prompted if not given.", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py project create [name]')}                           : Creates a new project in the CWD. The name will be prompted if not given.", mtype="info")
+            self.console.log(f"  > {self.__fmt_code('modi.py project create <name> in <directory>')}          : Creates a new project in the directory specified by <directory>. The name must be specified", mtype="info")
             self.console.log(f"- {self.__fmt_code('modi.py project delete <name>')}                           : Removes a project from Modi's config and deletes the directory it's located in. Will prompt before deletion.", mtype="info")
             self.console.log(f"- {self.__fmt_code('modi.py project unlist <name>')}                           : Removes a project from Modi's config, but keeps the directory it's located in.", mtype="info")
             self.console.log(f"- {self.__fmt_code('modi.py project goto <name>')}                             : In the Modi Shell, jumps to the directory of the specified project (equivalent to cd).", mtype="info")
-            self.console.log(f"- {self.__fmt_code('modi.py project bootstrap <name> from <pkg>')}             : Creates a new project the same as self.__fmt_code('modi.py project create'), but also initialises it from a Modi package.", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py project bootstrap <name> from <pkg>')}             : Creates a new project the same as {self.__fmt_code('modi.py project create')}, but also initialises it from a Modi package.", mtype="info")
             self.console.log(f"  > {self.__fmt_code('modi.py project bootstrap <name> from <pkg> into <dir>')}: Same as above, but use <dir> as the working/project directory.", mtype="info")
         elif name == "shell":
             self.console.log(f"- {self.__fmt_code('modi.py shell')} : Launches a shell, where all Modi commands (as well as some shell extras like `cd` and `ls`) are available without prefixing with 'modi.py'", mtype="info")
-        elif name == "bootstrap":
-            self.console.log(f"- {self.__fmt_code('modi.py bootstrap <pkg_name>')}: Removes all other files in the CWD (except modi.py and any archive files beginning with <pkg_name>) and bootstraps the project from a corresponding archive.")
-            self.console.log(f" > e.g. {self.__fmt_code('modi.py bootstrap asciimatics')} would install a package from either 'asciimatics.zip', 'asciimatics.tar.gz' or (preferably) 'asciimatics.modi.pkg'.")
+        elif name == "bootstrap" or name == "setup":
+            self.console.log(f"- {self.__fmt_code(f'modi.py {name} <pkg_name>')}: Removes all other files in the CWD (except modi.py and any archive files beginning with <pkg_name>) and bootstraps the project from a corresponding archive.", mtype="info")
+            self.console.log(f" > e.g. {self.__fmt_code(f'modi.py {name} asciimatics')} would install a package from either 'asciimatics.zip', 'asciimatics.tar.gz' or (preferably) 'asciimatics.modi.pkg'.", mtype="info")
         elif name == "help":
             self.console.log(f"- {self.__fmt_code('modi.py help')}        : Shows the short help view for MODI.", mtype="info")
             self.console.log(f"  > {self.__fmt_code('modi.py help [cmd]')}: Shows detailed help for a specific command.", mtype="info")
@@ -862,6 +881,22 @@ class Modi:
             self.console.log(f"- {self.__fmt_code('modi.py demo [font]')}: Shows Modi's logo with PyFiglet + Rich, downloading if necessary. Optionally uses the specified PyFiglet font.", mtype="info")
         elif name == "logo":
             self.console.log(f"- {self.__fmt_code('modi.py logo [font]')}: Alias for {self.__fmt_code('modi.py demo [logo]')}", mtype="info")
+        elif name == "remote":
+            self.console.log(f"- {self.__fmt_code('modi.py remote set <url>')}            : Sets Modi's remote repository URL to <url>. This means Modi will download all packages from that remote.", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py remote authenticate')}         : Authenticates with the remote, which will return an access token that Modi will store. Note - for security reasons, this command can only be run in interactive mode.", mtype="info")
+            self.console.log(f"  > {self.__fmt_code('modi.py remote authenticate logout')}: Logout from all remotes, removing their credentials from Modi's cache.", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py remote publish <pkg_name>')}   : Upload a package to remote repository. Note - you must be logged-in with {self.__fmt_code('modi.py remote authenticate')} to use this command.", mtype="info")
+            self.console.log(f"- {self.__fmt_code('modi.py remote bootstrap <pkg_name>')} : Bootstraps a project from a remote package instead of a local one. Note - this will remove all files in the CWD, except modi.py", mtype="info")
+        elif name == "self":
+            self.console.log(f"- {self.__fmt_code('modi.py self sync')} : Updates Modi itself, pulling from the latest version in the remote repository (must be set with {self.__fmt_code('modi.py remote set <url>')}.", mtype="info")
+
+        elif name == "gui":
+            self.console.log(f"- {self.__fmt_code('modi.py gui')}           : Launches the Modi GUI. Note - this can also be launched by running {self.__fmt_code('gui.py')} in the Modi directory.", mtype="info")
+            self.console.log(f"  > Note: {self.__fmt_style('The Modi full GUI is not yet implemented. Please use the minimal GUI until further notice.', 'bold indian_red')}", mtype="info")
+            self.console.log(f"  > {self.__fmt_code('modi.py gui minimal')} : Launches the Modi Minimal GUI - this can only install packages to CWD.", mtype="info")
+
+        elif name == "add":
+            self.console.log(f"- {self.__fmt_code('modi.py add <args>')} : Equivalent to {self.__fmt_code('modi.py install local <args>')}, but also adds the packages to 'requirements.txt' and the Modi project config, if available.", mtype="info")
 
     def logo(self, font="colossal"):
         """Show the Modi logo, as a demonstration for Modi's capabilities
@@ -1568,8 +1603,13 @@ class Modi:
             if("[" in arg and "]" in arg):
                 fmt_string += f" [bold][[dark_sea_green2]{arg[1:(len(arg) - 1)]}[/dark_sea_green2]][/bold]"
             elif("<" in arg and ">" in arg):
-                fmt_string += f" [bold]<[light_sky_blue1]{arg[1:(len(arg) - 1)]}[/light_sky_blue1]>[/bold]"
-            elif(arg == "all" or arg == "auto"):
+                if(arg[0] == "@"):
+                    fmt_string += f" [bold][dark_sea_green2]@[/dark_sea_green2]<[light_sky_blue1]{arg[2:(len(arg) - 1)]}[/light_sky_blue1]>[/bold]"
+                else:
+                    fmt_string += f" [bold]<[light_sky_blue1]{arg[1:len(arg) - 1]}[/light_sky_blue1]>[/bold]"
+            elif(arg in ["all", "auto", "freeze", "logout"]):
+                fmt_string += f" [bold gold1]{arg}[/bold gold1]"
+            elif(arg in ["in", "into", "from"]):
                 fmt_string += f" [bold dark_sea_green2]{arg}[/bold dark_sea_green2]"
             elif(i == 0):
                 fmt_string += f"[bold light_sky_blue1]{arg}[/bold light_sky_blue1]"
