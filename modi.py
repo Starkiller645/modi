@@ -29,7 +29,8 @@ import requests
 from pathlib import Path
 from io import StringIO
 import glob
-import readline
+if(os.name == "posix"):
+    import readline
 termtype = "plain"
 modi_version = "v0.7.5"
 try:
