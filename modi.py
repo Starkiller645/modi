@@ -1630,7 +1630,7 @@ class Modi:
         current_env = os.environ.copy()
         current_env["PYTHONPATH"] = str(Path(self.prefix) / Path(self.site_prefix))
         if(os.name != "posix"):
-            inst_result = subprocess.run(f"py -m pip install --disable-pip-version-check --quiet --ignore-installed --no-warn-script-location {pkg} --prefix \"{self.prefix}\"", env=current_env, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            inst_result = subprocess.run(f"'{sys.executable}' -m pip install --disable-pip-version-check --quiet --ignore-installed --no-warn-script-location {pkg} --prefix \"{self.prefix}\"", env=current_env, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         else:
             inst_result = subprocess.run(f"'{sys.executable}' -m pip install --quiet --ignore-installed --no-warn-script-location {pkg} --prefix {self.prefix}", env=current_env, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         if(inst_result.returncode != 0):
