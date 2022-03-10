@@ -1313,7 +1313,7 @@ class Modi:
                 except IsADirectoryError:
                     shutil.rmtree(Path(f"{cwd}/{file}"))
                 except PermissionError:
-                    self.console.log("Could not remove file {file} because of a permissions error", mtype="warning")
+                    self.console.log(f"Could not remove file '{file}' because of a permissions error", mtype="warning")
                     pass
             if(Path(os.getcwd()) == cwd):
                 shutil.copy(Path(f"{cwd}/modi.py"), Path(f"{cwd}/modi.py.bak"))
@@ -1378,7 +1378,10 @@ class Modi:
         if not cleanup:
             with open(Path(f"{cwd}/modi.meta.json"), "w") as meta_file:
                 meta_file.write(json.dumps(file_meta, indent=4))
-        os.remove(correct_file)
+        try:
+            os.remove(correct_file)
+        except PermissionError:
+            self.console.log(f"Could not remove file '{correct_file}' because of a permissions error", mtype="warning")
         final_deps = [*file_meta["dependencies"]]
         if cleanup:
             if(file_meta != ""):
